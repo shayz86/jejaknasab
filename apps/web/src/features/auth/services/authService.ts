@@ -10,6 +10,8 @@ const defaultOwner: AuthUser = {
   password: 'owner123',
   role: 'owner',
   assignedWorkspaceSlug: 'demo-workspace',
+  familyName: 'JejakNasab Demo',
+  packageName: 'Ultimate',
   createdAt: new Date().toISOString(),
 }
 
@@ -74,13 +76,19 @@ export function registerUser(form: AuthForm) {
     throw new Error('Email sudah terdaftar.')
   }
 
+  if (form.password !== form.confirmPassword) {
+    throw new Error('Konfirmasi password tidak cocok.')
+  }
+
   const nextUser: AuthUser = {
     id: crypto.randomUUID(),
     fullName: form.fullName.trim(),
     email: form.email.trim().toLowerCase(),
     password: form.password,
-    role: form.role,
-    assignedWorkspaceSlug: form.assignedWorkspaceSlug.trim(),
+    role: 'family_admin',
+    assignedWorkspaceSlug: form.assignedWorkspaceSlug.trim().toLowerCase(),
+    familyName: form.familyName.trim(),
+    packageName: form.packageName === 'Ultimate' ? 'Ultimate' : 'Premium',
     createdAt: new Date().toISOString(),
   }
 
@@ -110,5 +118,5 @@ export function getRoleRedirect(role: UserRole, assignedWorkspaceSlug: string) {
     return '/owner'
   }
 
-  return assignedWorkspaceSlug ? `/workspace/${assignedWorkspaceSlug}` : '/'
+  return assignedWorkspaceSlug ? '/app' : '/'
 }

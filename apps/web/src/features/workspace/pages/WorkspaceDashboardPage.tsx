@@ -15,9 +15,11 @@ export function WorkspaceDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
 
+  const currentSlug = slug ?? session?.assignedWorkspaceSlug
+
   useEffect(() => {
     void loadWorkspace()
-  }, [slug])
+  }, [currentSlug])
 
   const loadWorkspace = async () => {
     setIsLoading(true)
@@ -25,7 +27,7 @@ export function WorkspaceDashboardPage() {
 
     try {
       const list = await getWorkspaces()
-      const nextWorkspace = list.find((item) => item.slug === slug) ?? null
+      const nextWorkspace = list.find((item) => item.slug === currentSlug) ?? null
       setWorkspace(nextWorkspace)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Gagal memuat workspace.')
@@ -38,8 +40,12 @@ export function WorkspaceDashboardPage() {
     return <Navigate to="/login" replace />
   }
 
-  if (session.role !== 'owner' && session.assignedWorkspaceSlug !== slug) {
-    return <Navigate to={`/workspace/${session.assignedWorkspaceSlug}`} replace />
+  if (session.role === 'owner') {
+    return <Navigate to="/owner" replace />
+  }
+
+  if (!currentSlug || session.assignedWorkspaceSlug !== currentSlug) {
+    return <Navigate to="/app" replace />
   }
 
   if (isLoading) {

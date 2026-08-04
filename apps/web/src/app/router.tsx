@@ -22,9 +22,17 @@ export function Router() {
         }
       />
       <Route
+        path="/app"
+        element={
+          <ProtectedRoute role="family_admin">
+            <WorkspaceDashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/workspace/:slug"
         element={
-          <ProtectedRoute role="member">
+          <ProtectedRoute role="family_admin">
             <WorkspaceDashboardPage />
           </ProtectedRoute>
         }
@@ -32,7 +40,7 @@ export function Router() {
       <Route
         path="/workspace/:slug/persons"
         element={
-          <ProtectedRoute role="member">
+          <ProtectedRoute role="family_admin">
             <PersonListPage />
           </ProtectedRoute>
         }

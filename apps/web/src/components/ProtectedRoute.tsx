@@ -19,5 +19,9 @@ export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
     return <Navigate to="/" replace />
   }
 
+  if (role === 'family_admin' && !['family_admin', 'member'].includes(session.role)) {
+    return <Navigate to="/" replace />
+  }
+
   return <>{children}</>
 }

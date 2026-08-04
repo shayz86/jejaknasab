@@ -7,6 +7,8 @@ export type AuthUser = {
   password: string
   role: UserRole
   assignedWorkspaceSlug: string
+  familyName: string
+  packageName: 'Premium' | 'Ultimate'
   createdAt: string
 }
 
@@ -14,6 +16,8 @@ export type AuthForm = {
   fullName: string
   email: string
   password: string
-  role: UserRole
+  confirmPassword: string
+  familyName: string
   assignedWorkspaceSlug: string
+  packageName: 'Premium' | 'Ultimate' | ''
 }
