@@ -12,7 +12,8 @@ export function ProtectedRoute({ role, children }: ProtectedRouteProps) {
   const location = useLocation()
 
   if (!session) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    const fallbackPath = role === 'owner' ? '/owner/login' : '/login'
+    return <Navigate to={fallbackPath} replace state={{ from: location.pathname }} />
   }
 
   if (role === 'owner' && session.role !== 'owner') {
