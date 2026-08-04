@@ -1,13 +1,14 @@
 type QuickActionCardProps = {
   icon: string
   title: string
+  onClick?: () => void
 }
 
-export function QuickActionCard({ icon, title }: QuickActionCardProps) {
+export function QuickActionCard({ icon, title, onClick }: QuickActionCardProps) {
   return (
-    <div className="action-card">
+    <button type="button" className="action-card" onClick={onClick}>
       <div className="action-card__icon">{icon}</div>
       <span>{title}</span>
-    </div>
+    </button>
   )
 }

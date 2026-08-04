@@ -98,8 +98,17 @@ export function WorkspaceDashboardPage() {
           </div>
 
           <div className="actions-grid">
-            {workspaceQuickActions.map((action) => (
-              <QuickActionCard key={action.title} icon={action.icon} title={action.title} />
+            {workspaceQuickActions.map((action, index) => (
+              <QuickActionCard
+                key={action.title}
+                icon={action.icon}
+                title={action.title}
+                onClick={() => {
+                  if (index === 0) {
+                    navigate(`/workspace/${workspace.slug}/persons?workspaceId=${encodeURIComponent(workspace.id)}`)
+                  }
+                }}
+              />
             ))}
           </div>
         </section>
