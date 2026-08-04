@@ -1,7 +1,7 @@
 export type PackageOption = 'Premium' | 'Ultimate'
 
 export type Workspace = {
-  id: number
+  id: string
   namaKeluarga: string
   slug: string
   familyAdmin: string

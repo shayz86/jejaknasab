@@ -1,27 +1,42 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../components/Button'
 import { EmptyState } from '../../../components/EmptyState'
 import { Header } from '../../../components/Header'
 import { StatCard } from '../../../components/StatCard'
+import { createWorkspace, getWorkspaces } from '../../../services/workspaceApi'
 import { initialForm } from '../data'
 import { WorkspaceCard } from '../components/WorkspaceCard'
 import { WorkspaceCreateModal } from '../components/WorkspaceCreateModal'
 import type { ErrorMap, PackageOption, Workspace, WorkspaceForm } from '../types'
-
-const STORAGE_KEY = 'jejaknasab-workspaces'
-
-function getStoredWorkspaces(): Workspace[] {
-  const saved = localStorage.getItem(STORAGE_KEY)
-  return saved ? JSON.parse(saved) : []
-}
 
 export function PlatformOwnerDashboardPage() {
   const navigate = useNavigate()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form, setForm] = useState<WorkspaceForm>(initialForm)
   const [errors, setErrors] = useState<ErrorMap>({})
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => getStoredWorkspaces())
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    void loadWorkspaces()
+  }, [])
+
+  const loadWorkspaces = async () => {
+    setIsLoading(true)
+    setErrorMessage('')
+
+    try {
+      const nextWorkspaces = await getWorkspaces()
+      setWorkspaces(nextWorkspaces)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal memuat workspace.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const stats = useMemo(() => {
     return {
@@ -76,25 +91,31 @@ export function PlatformOwnerDashboardPage() {
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateForm()) {
       return
     }
 
-    const newWorkspace: Workspace = {
-      id: Date.now(),
-      namaKeluarga: form.namaKeluarga.trim(),
-      slug: form.slug.trim(),
-      familyAdmin: form.familyAdmin.trim(),
-      email: form.email.trim(),
-      paket: form.paket as PackageOption,
-      status: 'Aktif',
-    }
+    setIsSaving(true)
+    setErrorMessage('')
 
-    const nextList = [newWorkspace, ...workspaces]
-    setWorkspaces(nextList)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList))
-    closeModal()
+    try {
+      const newWorkspace = await createWorkspace({
+        ...form,
+        namaKeluarga: form.namaKeluarga.trim(),
+        slug: form.slug.trim(),
+        familyAdmin: form.familyAdmin.trim(),
+        email: form.email.trim(),
+        paket: form.paket as PackageOption,
+      })
+
+      setWorkspaces((current) => [newWorkspace, ...current])
+      closeModal()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal menyimpan workspace.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -112,7 +133,11 @@ export function PlatformOwnerDashboardPage() {
           + Buat Workspace
         </Button>
 
-        {workspaces.length === 0 ? (
+        {errorMessage ? <p className="form-field__error">{errorMessage}</p> : null}
+
+        {isLoading ? (
+          <EmptyState icon="⏳" title="Memuat Workspace" description="Mengambil data workspace dari server..." />
+        ) : workspaces.length === 0 ? (
           <EmptyState
             icon="📂"
             title="Belum ada Workspace"
@@ -138,6 +163,7 @@ export function PlatformOwnerDashboardPage() {
           onClose={closeModal}
           onChange={handleFieldChange}
           onSave={handleSave}
+          isSaving={isSaving}
         />
       ) : null}
     </main>

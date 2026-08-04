@@ -1,20 +1,56 @@
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../../components/Button'
+import { getWorkspaces } from '../../../services/workspaceApi'
 import { QuickActionCard } from '../components/QuickActionCard'
 import { workspaceQuickActions } from '../data'
 import type { Workspace } from '../../platform/types'
 
-const STORAGE_KEY = 'jejaknasab-workspaces'
-
 export function WorkspaceDashboardPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const workspace = (() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    const list: Workspace[] = saved ? JSON.parse(saved) : []
-    return list.find((item) => item.slug === slug) ?? null
-  })()
+  useEffect(() => {
+    void loadWorkspace()
+  }, [slug])
+
+  const loadWorkspace = async () => {
+    setIsLoading(true)
+    setErrorMessage('')
+
+    try {
+      const list = await getWorkspaces()
+      const nextWorkspace = list.find((item) => item.slug === slug) ?? null
+      setWorkspace(nextWorkspace)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal memuat workspace.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="workspace-dashboard-page">
+        <section className="workspace-dashboard-shell">
+          <p className="dashboard-title">Memuat Workspace...</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (errorMessage) {
+    return (
+      <main className="workspace-dashboard-page">
+        <section className="workspace-dashboard-shell">
+          <p className="dashboard-title">{errorMessage}</p>
+        </section>
+      </main>
+    )
+  }
 
   if (!workspace) {
     return <Navigate to="/" replace />

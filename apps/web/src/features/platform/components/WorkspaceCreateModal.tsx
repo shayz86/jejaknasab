@@ -8,9 +8,10 @@ type WorkspaceCreateModalProps = {
   onClose: () => void
   onChange: (field: keyof WorkspaceForm, value: string) => void
   onSave: () => void
+  isSaving?: boolean
 }
 
-export function WorkspaceCreateModal({ form, errors, onClose, onChange, onSave }: WorkspaceCreateModalProps) {
+export function WorkspaceCreateModal({ form, errors, onClose, onChange, onSave, isSaving = false }: WorkspaceCreateModalProps) {
   return (
     <div className="modal-overlay" role="presentation">
       <Card className="modal-card">
@@ -71,8 +72,8 @@ export function WorkspaceCreateModal({ form, errors, onClose, onChange, onSave }
           <Button className="secondary-button" onClick={onClose}>
             Batal
           </Button>
-          <Button className="primary-button" onClick={onSave}>
-            Simpan Workspace
+          <Button className="primary-button" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Menyimpan...' : 'Simpan Workspace'}
           </Button>
         </div>
       </Card>

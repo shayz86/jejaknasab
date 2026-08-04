@@ -5,11 +5,12 @@ type ButtonProps = {
   type?: 'button' | 'submit' | 'reset'
   className?: string
   onClick?: () => void
+  disabled?: boolean
 }
 
-export function Button({ children, type = 'button', className = '', onClick }: ButtonProps) {
+export function Button({ children, type = 'button', className = '', onClick, disabled = false }: ButtonProps) {
   return (
-    <button type={type} className={className} onClick={onClick}>
+    <button type={type} className={className} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   )
