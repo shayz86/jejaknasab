@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../../components/Button'
+import { getSession } from '../../auth/services/authService'
 import { getWorkspaces } from '../../../services/workspaceApi'
 import { QuickActionCard } from '../components/QuickActionCard'
 import { workspaceQuickActions } from '../data'
@@ -9,6 +10,7 @@ import type { Workspace } from '../../platform/types'
 export function WorkspaceDashboardPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const session = getSession()
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -30,6 +32,14 @@ export function WorkspaceDashboardPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (session.role !== 'owner' && session.assignedWorkspaceSlug !== slug) {
+    return <Navigate to={`/workspace/${session.assignedWorkspaceSlug}`} replace />
   }
 
   if (isLoading) {

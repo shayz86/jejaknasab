@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../components/Button'
 import { EmptyState } from '../../../components/EmptyState'
 import { Header } from '../../../components/Header'
+import { getSession } from '../../auth/services/authService'
 import { createPerson, getPersons } from '../services/personApi'
 import { initialPersonForm } from '../data'
 import { PersonAddModal } from '../components/PersonAddModal'
@@ -11,6 +12,7 @@ import type { Person, PersonErrorMap, PersonForm } from '../types'
 export function PersonListPage() {
   const navigate = useNavigate()
   const { slug } = useParams()
+  const session = getSession()
   const [searchParams] = useSearchParams()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form, setForm] = useState<PersonForm>(initialPersonForm)
@@ -38,6 +40,14 @@ export function PersonListPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (session.role !== 'owner' && session.assignedWorkspaceSlug !== slug) {
+    return <Navigate to={`/workspace/${session.assignedWorkspaceSlug}`} replace />
   }
 
   if (!workspaceId) {
