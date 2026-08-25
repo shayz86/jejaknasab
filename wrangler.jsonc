@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jejaknasab",
+  "compatibility_date": "2026-08-25",
+  "pages_build_output_dir": "apps/web/dist",
+  "d1_databases": [{"binding":"DB","database_name":"jejaknasab-db","database_id":"ISI_DATABASE_ID_ASLI"}]
+}

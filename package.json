@@ -1,0 +1,1 @@
+{"name":"jejaknasab","private":true,"version":"1.0.0","scripts":{"build":"npm --prefix apps/web install && npm --prefix apps/web run build","dev":"npm --prefix apps/web run dev","deploy":"npm run build && npx wrangler pages deploy apps/web/dist --project-name=jejaknasab --commit-dirty=true"},"devDependencies":{"wrangler":"^4.25.0"}}
