@@ -1,0 +1,1 @@
+ALTER TABLE family_trees ADD COLUMN auto_name INTEGER NOT NULL DEFAULT 0;

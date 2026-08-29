@@ -36,3 +36,6 @@ Cloudflare Pages + D1, tanpa framework frontend.
 - Owner Akun: kelola penuh satu silsilah miliknya, termasuk publikasi, privasi, undangan, dan persetujuan Family Member.
 - Family Member: akses/edit sesuai posisi dan batas paket.
 - Public: hanya melihat informasi yang diizinkan Owner Akun.
+
+## V5.1
+Perbaikan: nama silsilah manual/otomatis, edit nama silsilah, profil publik interaktif, salin link dengan fallback, garis relasi, dan upgrade Premium ke Ultimate diskon 40%.
