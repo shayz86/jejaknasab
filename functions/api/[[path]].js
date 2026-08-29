@@ -43,23 +43,31 @@ export async function onRequest(context) {
   const rawPath=params.path; const path='/' + (Array.isArray(rawPath)?rawPath.join('/'):String(rawPath||''));
   const method=request.method;
 
-  // Setup Owner harus dapat dijalankan tanpa SESSION_SECRET/session login.
-  // SESSION_SECRET hanya wajib untuk endpoint yang membutuhkan autentikasi.
+  // Bootstrap Owner: endpoint ini harus dapat berjalan sebelum ada session.
   if(path==='/setup-owner' && method==='POST') {
-    const b=await body(request);
     if(!env.OWNER_SETUP_KEY) return bad('OWNER_SETUP_KEY belum dikonfigurasi di Cloudflare.',500);
-    if(b.setupKey!==env.OWNER_SETUP_KEY) return bad('Setup key salah.',403);
-    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='owner'").first();
-    if(Number(count?.n||0)>0) return bad('Owner sudah dibuat.',409);
+    const b=await body(request);
+    if(String(b.setupKey??'') !== String(env.OWNER_SETUP_KEY)) return bad('OWNER_SETUP_KEY salah.',403);
+
+    let count;
+    try {
+      count=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='owner'").first();
+    } catch (e) {
+      return bad('Database D1 belum siap atau schema.sql belum dijalankan.',500);
+    }
+    if(Number(count?.n||0)>0) return bad('Owner sudah dibuat. Setup Owner tidak dapat digunakan lagi.',409);
+
     const name=clean(b.name,120), em=email(b.email), pw=String(b.password||'');
     if(name.length<2||!em.includes('@')||pw.length<8) return bad('Data owner tidak valid. Password minimal 8 karakter.');
-    const ph=await passwordHash(pw);
     try {
+      const ph=await passwordHash(pw);
       await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(name,em,ph.hash,ph.salt).run();
-    } catch(e) {
-      return bad('Gagal membuat Owner di database: '+String(e?.message||e),500);
+      return json({ok:true,message:'Owner berhasil dibuat. Silakan login.'});
+    } catch (e) {
+      const msg=String(e?.message||e);
+      if(msg.toLowerCase().includes('unique') && msg.toLowerCase().includes('email')) return bad('Email owner sudah terdaftar.',409);
+      return bad('Gagal membuat Owner di database D1: '+msg,500);
     }
-    return json({ok:true,message:'Owner berhasil dibuat. Silakan login.'});
   }
 
   if(!env.SESSION_SECRET) return bad('SESSION_SECRET belum dikonfigurasi di Cloudflare.',500);
