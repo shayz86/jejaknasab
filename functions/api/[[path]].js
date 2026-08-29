@@ -1,142 +1,72 @@
-const enc = new TextEncoder();
-const dec = new TextDecoder();
+const E=new TextEncoder(),D=new TextDecoder();
+const J=(d,s=200,h={})=>new Response(JSON.stringify(d),{status:s,headers:{'content-type':'application/json;charset=utf-8',...h}}),B=(m,s=400)=>J({error:m},s);
+const clean=(x,n=5000)=>String(x??'').trim().slice(0,n),mail=x=>String(x??'').trim().toLowerCase();
+const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const ub=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),c=>c.charCodeAt(0))};
+const rand=()=>b64(crypto.getRandomValues(new Uint8Array(24)));
+async function hmac(sec,data){let k=await crypto.subtle.importKey('raw',E.encode(sec),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64(await crypto.subtle.sign('HMAC',k,E.encode(data)))}
+async function makeTok(sec,p){let x=b64(E.encode(JSON.stringify(p)));return x+'.'+await hmac(sec,x)}
+async function readTok(sec,t){if(!sec||!t)return null;let [x,s]=t.split('.');if(!x||!s||await hmac(sec,x)!==s)return null;try{let p=JSON.parse(D.decode(ub(x)));return p.exp>Date.now()?p:null}catch{return null}}
+async function phash(p,s){s=s?ub(s):crypto.getRandomValues(new Uint8Array(16));let k=await crypto.subtle.importKey('raw',E.encode(p),'PBKDF2',false,['deriveBits']);let z=await crypto.subtle.deriveBits({name:'PBKDF2',salt:s,iterations:100000,hash:'SHA-256'},k,256);return {hash:b64(z),salt:b64(s)}}
+const cookie=(v,max=604800)=>`jn_session=${v}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${max}`;
+async function body(r){try{return await r.json()}catch{return {}}}
+async function userOf(env,req){let t=await readTok(env.SESSION_SECRET,req.headers.get('Cookie')?.match(/jn_session=([^;]+)/)?.[1]);if(!t)return null;return env.DB.prepare('SELECT id,name,email,role,status FROM users WHERE id=?').bind(t.uid).first()}
+async function planOf(env,uid){let r=await env.DB.prepare('SELECT plan FROM user_plans WHERE user_id=?').bind(uid).first();return r?.plan||'premium'}
+const limits=p=>p==='ultimate'?{gen:6,members:20}:{gen:3,members:10};
+const price=(p,e)=>p==='ultimate'?Number(e.ULTIMATE_PRICE||100000):Number(e.PREMIUM_PRICE||50000);
+const pname=p=>[p?.first_name,p?.last_name].filter(Boolean).join(' ');
+const age=(b,d='')=>{if(!b)return null;let a=new Date(b+'T00:00:00'),z=d?new Date(d+'T00:00:00'):new Date();if(Number.isNaN(a.getTime())||Number.isNaN(z.getTime()))return null;let n=z.getFullYear()-a.getFullYear();if(z.getMonth()<a.getMonth()||(z.getMonth()===a.getMonth()&&z.getDate()<a.getDate()))n--;return n<0?null:n};
+async function tree(env,id){return env.DB.prepare('SELECT * FROM family_trees WHERE id=?').bind(id).first()}
+async function graph(env,tid){let ps=(await env.DB.prepare('SELECT * FROM persons WHERE tree_id=?').bind(tid).all()).results,rs=(await env.DB.prepare('SELECT * FROM relationships WHERE tree_id=?').bind(tid).all()).results;let pa=new Map(),ch=new Map(),sp=new Map();const add=(m,k,v)=>{if(!m.has(k))m.set(k,[]);m.get(k).push(v)};for(let r of rs){if(r.type==='parent'){add(pa,r.to_person_id,r.from_person_id);add(ch,r.from_person_id,r.to_person_id)}else{add(sp,r.from_person_id,r.to_person_id);add(sp,r.to_person_id,r.from_person_id)}}return{ps,rs,pa,ch,sp}}
+function walk(start,map,n){let o=new Map([[start,0]]),q=[[start,0]];while(q.length){let[x,d]=q.shift();if(d>=n)continue;for(let y of(map.get(x)||[]))if(!o.has(y)){o.set(y,d+1);q.push([y,d+1])}}return o}
+function sib(start,g){let s=new Set();for(let p of(g.pa.get(start)||[]))for(let c of(g.ch.get(p)||[]))if(c!==start)s.add(c);return s}
+function scope(start,g,n){let ids=new Set([start]);for(let x of walk(start,g.pa,n).keys())ids.add(x);for(let x of walk(start,g.ch,n).keys())ids.add(x);let ss=sib(start,g);for(let x of ss)ids.add(x);for(let x of ss)for(let y of walk(x,g.ch,n).keys())ids.add(y);for(let x of ss)for(let y of(g.sp.get(x)||[]))ids.add(y);for(let x of(g.sp.get(start)||[])){ids.add(x);for(let y of walk(x,g.ch,n).keys())ids.add(y)}for(let x of [...ids])for(let y of(g.sp.get(x)||[]))ids.add(y);return ids}
+async function membership(env,tid,uid){return env.DB.prepare("SELECT tm.*,p.first_name,p.last_name FROM tree_members tm JOIN persons p ON p.id=tm.person_id WHERE tm.tree_id=? AND tm.user_id=? AND tm.status='active'").bind(tid,uid).first()}
+async function audit(env,tid,uid,a,t,id,details=''){await env.DB.prepare('INSERT INTO audit_logs(tree_id,actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?,?)').bind(tid,uid,a,t,id||null,details).run()}
+async function ownerAccess(env,u,t){return u?.role==='member'&&t.created_by===u.id}
+async function memberScope(env,u,t){if(u.role!=='member'||t.created_by===u.id)return null;let m=await membership(env,t.id,u.id);if(!m)return null;let g=await graph(env,t.id),p=await planOf(env,u.id);return{m,g,ids:scope(m.person_id,g,limits(p).gen),plan:p}}
 
-function json(data, status = 200, extra = {}) {
-  return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...extra } });
-}
-function bad(message, status = 400) { return json({ error: message }, status); }
-function b64u(bytes) { return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
-function b64uStr(s) { return b64u(enc.encode(s)); }
-function fromB64u(s) { s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return Uint8Array.from(atob(s), c=>c.charCodeAt(0)); }
-async function hmac(secret, data) {
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
-  return b64u(await crypto.subtle.sign('HMAC', key, enc.encode(data)));
-}
-async function token(secret, payload) {
-  const body=b64uStr(JSON.stringify(payload));
-  return body+'.'+await hmac(secret,body);
-}
-async function verifyToken(secret, t) {
-  if(!t) return null;
-  const [body,sig] = t.split('.'); if(!body||!sig) return null;
-  const expected=await hmac(secret,body);
-  if(expected!==sig) return null;
-  try { const p=JSON.parse(dec.decode(fromB64u(body))); if(!p.exp || p.exp<Date.now()) return null; return p; } catch { return null; }
-}
-async function passwordHash(password, saltB64) {
-  const salt=saltB64?fromB64u(saltB64):crypto.getRandomValues(new Uint8Array(16));
-  const key=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);
-  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},key,256);
-  return {hash:b64u(bits),salt:b64u(salt)};
-}
-async function checkPassword(password, hash, salt) { return (await passwordHash(password,salt)).hash===hash; }
-function cookie(name,value,maxAge=604800) { return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`; }
-async function auth(request, env) { return verifyToken(env.SESSION_SECRET, request.headers.get('Cookie')?.match(/jn_session=([^;]+)/)?.[1]); }
-function clean(s, max=5000) { return String(s??'').trim().slice(0,max); }
-function email(s) { return String(s??'').trim().toLowerCase(); }
-async function body(request) { try{return await request.json()}catch{return {}} }
-function requireRole(user, role) { return user && (user.role===role || user.role==='owner'); }
-
-export async function onRequest(context) {
-  const {request,env,params}=context;
-  if(!env.DB) return bad('D1 binding DB belum dikonfigurasi.',500);
-  const rawPath=params.path; const path='/' + (Array.isArray(rawPath)?rawPath.join('/'):String(rawPath||''));
-  const method=request.method;
-
-  // Bootstrap Owner: endpoint ini harus dapat berjalan sebelum ada session.
-  if(path==='/setup-owner' && method==='POST') {
-    if(!env.OWNER_SETUP_KEY) return bad('OWNER_SETUP_KEY belum dikonfigurasi di Cloudflare.',500);
-    const b=await body(request);
-    if(String(b.setupKey??'') !== String(env.OWNER_SETUP_KEY)) return bad('OWNER_SETUP_KEY salah.',403);
-
-    let count;
-    try {
-      count=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='owner'").first();
-    } catch (e) {
-      return bad('Database D1 belum siap atau schema.sql belum dijalankan.',500);
-    }
-    if(Number(count?.n||0)>0) return bad('Owner sudah dibuat. Setup Owner tidak dapat digunakan lagi.',409);
-
-    const name=clean(b.name,120), em=email(b.email), pw=String(b.password||'');
-    if(name.length<2||!em.includes('@')||pw.length<8) return bad('Data owner tidak valid. Password minimal 8 karakter.');
-    try {
-      const ph=await passwordHash(pw);
-      await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(name,em,ph.hash,ph.salt).run();
-      return json({ok:true,message:'Owner berhasil dibuat. Silakan login.'});
-    } catch (e) {
-      const msg=String(e?.message||e);
-      if(msg.toLowerCase().includes('unique') && msg.toLowerCase().includes('email')) return bad('Email owner sudah terdaftar.',409);
-      return bad('Gagal membuat Owner di database D1: '+msg,500);
-    }
-  }
-
-  if(!env.SESSION_SECRET) return bad('SESSION_SECRET belum dikonfigurasi di Cloudflare.',500);
-  const me=await auth(request,env);
-
-  if(path==='/config' && method==='GET') return json({price:Number(env.MEMBERSHIP_PRICE||50000), paymentInstructions:env.PAYMENT_INSTRUCTIONS||'Hubungi owner untuk instruksi pembayaran.'});
-  if(path==='/me' && method==='GET') {
-    if(!me) return json({user:null});
-    const u=await env.DB.prepare('SELECT id,name,email,role,status,created_at FROM users WHERE id=?').bind(me.uid).first();
-    return json({user:u||null});
-  }
-  if(path==='/register' && method==='POST') {
-    const b=await body(request), name=clean(b.name,120), em=email(b.email), password=String(b.password||'');
-    if(name.length<2||!em.includes('@')||password.length<8) return bad('Nama, email valid, dan password minimal 8 karakter wajib diisi.');
-    const exists=await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(em).first(); if(exists) return bad('Email sudah terdaftar.',409);
-    const ph=await passwordHash(password);
-    const r=await env.DB.prepare('INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,\'member\',\'pending\')').bind(name,em,ph.hash,ph.salt).run();
-    await env.DB.prepare('INSERT INTO payment_requests(user_id,amount,status) VALUES(?,?,\'pending\')').bind(r.meta.last_row_id,Number(env.MEMBERSHIP_PRICE||50000)).run();
-    return json({ok:true,message:'Pendaftaran berhasil. Akun menunggu aktivasi setelah pembayaran.'},201);
-  }
-  if(path==='/login' && method==='POST') {
-    const b=await body(request), em=email(b.email), pw=String(b.password||'');
-    const u=await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(em).first();
-    if(!u || !(await checkPassword(pw,u.password_hash,u.password_salt))) return bad('Email atau password salah.',401);
-    if(u.status!=='active') return bad(u.status==='pending'?'Akun belum aktif. Selesaikan pembayaran dan tunggu aktivasi owner.':'Akun ditangguhkan.',403);
-    const t=await token(env.SESSION_SECRET,{uid:u.id,role:u.role,exp:Date.now()+604800000});
-    return json({ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}},200,{'Set-Cookie':cookie('jn_session',t)});
-  }
-  if(path==='/logout' && method==='POST') return json({ok:true},200,{'Set-Cookie':cookie('jn_session','',0)});
-  if(!me) return bad('Login diperlukan.',401);
-
-  if(path==='/owner/users' && method==='GET') {
-    if(me.role!=='owner') return bad('Akses owner diperlukan.',403);
-    const r=await env.DB.prepare(`SELECT u.id,u.name,u.email,u.status,u.created_at,COALESCE(p.status,'none') payment_status,p.amount,p.id payment_id
-      FROM users u LEFT JOIN payment_requests p ON p.id=(SELECT id FROM payment_requests WHERE user_id=u.id ORDER BY id DESC LIMIT 1)
-      WHERE u.role='member' ORDER BY u.created_at DESC`).all();
-    return json({users:r.results});
-  }
-  if(path==='/owner/users/activate' && method==='POST') {
-    if(me.role!=='owner') return bad('Akses owner diperlukan.',403);
-    const b=await body(request); await env.DB.prepare("UPDATE users SET status='active',updated_at=CURRENT_TIMESTAMP WHERE id=? AND role='member'").bind(Number(b.userId)).run();
-    await env.DB.prepare("UPDATE payment_requests SET status='paid',reviewed_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=(SELECT id FROM payment_requests WHERE user_id=? ORDER BY id DESC LIMIT 1)").bind(Number(b.userId),Number(b.userId)).run();
-    return json({ok:true});
-  }
-  if(path==='/owner/users/suspend' && method==='POST') {
-    if(me.role!=='owner') return bad('Akses owner diperlukan.',403);
-    const b=await body(request); await env.DB.prepare("UPDATE users SET status='suspended',updated_at=CURRENT_TIMESTAMP WHERE id=? AND role='member'").bind(Number(b.userId)).run(); return json({ok:true});
-  }
-  if(path==='/trees' && method==='GET') {
-    const q=me.role==='owner' ? await env.DB.prepare('SELECT t.*,u.name creator_name FROM family_trees t JOIN users u ON u.id=t.created_by ORDER BY t.updated_at DESC').all() : await env.DB.prepare('SELECT * FROM family_trees WHERE created_by=? ORDER BY updated_at DESC').bind(me.uid).all();
-    return json({trees:q.results});
-  }
-  if(path==='/trees' && method==='POST') {
-    const b=await body(request), name=clean(b.name,150); if(!name) return bad('Nama pohon wajib diisi.');
-    const r=await env.DB.prepare('INSERT INTO family_trees(name,description,created_by) VALUES(?,?,?)').bind(name,clean(b.description,1000),me.uid).run(); return json({id:r.meta.last_row_id},201);
-  }
-  const tm=path.match(/^\/trees\/(\d+)$/);
-  if(tm && method==='DELETE') {
-    const id=Number(tm[1]); const t=await env.DB.prepare('SELECT * FROM family_trees WHERE id=?').bind(id).first(); if(!t) return bad('Pohon tidak ditemukan.',404); if(me.role!=='owner'&&t.created_by!==me.uid) return bad('Tidak diizinkan.',403); await env.DB.prepare('DELETE FROM family_trees WHERE id=?').bind(id).run(); return json({ok:true});
-  }
-  const pm=path.match(/^\/trees\/(\d+)\/persons$/);
-  if(pm) {
-    const treeId=Number(pm[1]); const t=await env.DB.prepare('SELECT * FROM family_trees WHERE id=?').bind(treeId).first(); if(!t) return bad('Pohon tidak ditemukan.',404); if(me.role!=='owner'&&t.created_by!==me.uid) return bad('Tidak diizinkan.',403);
-    if(method==='GET') { const r=await env.DB.prepare('SELECT * FROM persons WHERE tree_id=? ORDER BY first_name,last_name').bind(treeId).all(); return json({persons:r.results}); }
-    if(method==='POST') { const b=await body(request); const first=clean(b.first_name,100); if(!first) return bad('Nama depan wajib.'); const r=await env.DB.prepare('INSERT INTO persons(tree_id,first_name,last_name,gender,birth_date,death_date,birth_place,notes,photo_url) VALUES(?,?,?,?,?,?,?,?,?)').bind(treeId,first,clean(b.last_name,100),['male','female','other'].includes(b.gender)?b.gender:'other',clean(b.birth_date,30),clean(b.death_date,30),clean(b.birth_place,200),clean(b.notes,3000),clean(b.photo_url,1000)).run(); return json({id:r.meta.last_row_id},201); }
-  }
-  const pd=path.match(/^\/persons\/(\d+)$/);
-  if(pd && method==='DELETE') { const id=Number(pd[1]); const p=await env.DB.prepare('SELECT p.*,t.created_by FROM persons p JOIN family_trees t ON t.id=p.tree_id WHERE p.id=?').bind(id).first(); if(!p)return bad('Data tidak ditemukan.',404);if(me.role!=='owner'&&p.created_by!==me.uid)return bad('Tidak diizinkan.',403);await env.DB.prepare('DELETE FROM persons WHERE id=?').bind(id).run();return json({ok:true}); }
-  const rel=path.match(/^\/trees\/(\d+)\/relationships$/);
-  if(rel) { const treeId=Number(rel[1]); const t=await env.DB.prepare('SELECT * FROM family_trees WHERE id=?').bind(treeId).first();if(!t)return bad('Pohon tidak ditemukan.',404);if(me.role!=='owner'&&t.created_by!==me.uid)return bad('Tidak diizinkan.',403);if(method==='GET'){const r=await env.DB.prepare('SELECT * FROM relationships WHERE tree_id=? ORDER BY id').bind(treeId).all();return json({relationships:r.results});}if(method==='POST'){const b=await body(request), a=Number(b.from_person_id), z=Number(b.to_person_id), type=b.type;if(!a||!z||a===z||!['parent','spouse'].includes(type))return bad('Relasi tidak valid.');await env.DB.prepare('INSERT OR IGNORE INTO relationships(tree_id,from_person_id,to_person_id,type) VALUES(?,?,?,?)').bind(treeId,a,z,type).run();return json({ok:true});}}
-  return bad('Endpoint tidak ditemukan.',404);
+export async function onRequest({request,env,params}){
+ if(!env.DB)return B('D1 binding DB belum dikonfigurasi.',500);
+ let raw=params.path,path='/'+(Array.isArray(raw)?raw.join('/'):String(raw||'')),m=request.method;
+ // public/setup routes: no session dependency
+ if(path==='/setup-owner'&&m==='POST'){
+  if(!env.OWNER_SETUP_KEY)return B('OWNER_SETUP_KEY belum dikonfigurasi di Cloudflare.',500);let b=await body(request);if(b.setupKey!==env.OWNER_SETUP_KEY)return B('Setup key salah.',403);let c=await env.DB.prepare("SELECT COUNT(*) n FROM users WHERE role='owner'").first();if(Number(c.n))return B('Owner sudah dibuat.',409);let n=clean(b.name,120),e=mail(b.email),pw=String(b.password||'');if(n.length<2||!e.includes('@')||pw.length<8)return B('Data owner tidak valid. Password minimal 8 karakter.');let p=await phash(pw);await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(n,e,p.hash,p.salt).run();return J({ok:true,message:'Owner berhasil dibuat. Silakan login.'})
+ }
+ if(path==='/config'&&m==='GET')return J({premium:{price:price('premium',env),familyMembers:10,generation:3},ultimate:{price:price('ultimate',env),familyMembers:20,generation:6},paymentInstructions:env.PAYMENT_INSTRUCTIONS||'Hubungi owner untuk instruksi pembayaran.'});
+ let pm=path.match(/^\/public\/trees\/([A-Za-z0-9_-]+)$/);if(pm&&m==='GET'){let st=await env.DB.prepare('SELECT * FROM share_tokens WHERE token=? AND is_public=1').bind(pm[1]).first();if(!st)return B('Silsilah publik tidak ditemukan.',404);let t=await tree(env,st.tree_id),g=await graph(env,t.id),pr=(await env.DB.prepare('SELECT * FROM person_privacy WHERE person_id IN (SELECT id FROM persons WHERE tree_id=?)').bind(t.id).all()).results,pp=new Map(pr.map(x=>[x.person_id,x]));let persons=g.ps.map(p=>{let v=pp.get(p.id)||{show_name:1,show_age:1,show_birth_date:0,show_birth_place:0,show_photo:0};let x={id:p.id,name:v.show_name?pname(p):'Anggota keluarga',gender:p.gender,isDeceased:!!p.death_date,age:v.show_age?age(p.birth_date,p.death_date):null};if(v.show_birth_date)x.birth_date=p.birth_date||'';if(v.show_birth_place)x.birth_place=p.birth_place||'';if(v.show_photo)x.photo_url=p.photo_url||'';if(p.death_date)x.death_date=p.death_date;return x});return J({tree:{id:t.id,name:t.name,description:t.description},persons,relationships:g.rs})}
+ if(!env.SESSION_SECRET)return B('SESSION_SECRET belum dikonfigurasi.',500);let u=await userOf(env,request);
+ if(path==='/me'&&m==='GET')return J({user:u?{...u,plan:u.role==='member'?await planOf(env,u.id):null}:null});
+ if(path==='/register'&&m==='POST'){let b=await body(request),n=clean(b.name,120),e=mail(b.email),pw=String(b.password||''),p=b.plan==='ultimate'?'ultimate':'premium';if(n.length<2||!e.includes('@')||pw.length<8)return B('Nama, email valid, dan password minimal 8 karakter wajib diisi.');if(await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(e).first())return B('Email sudah terdaftar.',409);let h=await phash(pw),r=await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?, 'member','pending')").bind(n,e,h.hash,h.salt).run(),id=r.meta.last_row_id;await env.DB.prepare('INSERT INTO user_plans(user_id,plan) VALUES(?,?)').bind(id,p).run();await env.DB.prepare('INSERT INTO payment_requests(user_id,amount,status,note) VALUES(?,?,\'pending\',?)').bind(id,price(p,env),`Paket ${p}`).run();return J({ok:true,message:`Pendaftaran ${p} berhasil. Lakukan pembayaran dan tunggu aktivasi Owner Web.`},201)}
+ if(path==='/login'&&m==='POST'){let b=await body(request),e=mail(b.email),pw=String(b.password||''),x=await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(e).first();if(!x||(await phash(pw,x.password_salt)).hash!==x.password_hash)return B('Email atau password salah.',401);if(x.status!=='active')return B(x.status==='pending'?'Akun belum aktif. Tunggu aktivasi setelah pembayaran.':'Akun ditangguhkan.',403);let t=await makeTok(env.SESSION_SECRET,{uid:x.id,role:x.role,exp:Date.now()+604800000});return J({ok:true,user:{id:x.id,name:x.name,email:x.email,role:x.role,plan:x.role==='member'?await planOf(env,x.id):null}},200,{'Set-Cookie':cookie(t)})}
+ if(path==='/logout'&&m==='POST')return J({ok:true},200,{'Set-Cookie':cookie('',0)});
+ if(!u)return B('Login diperlukan.',401);
+ // platform owner/admin
+ if(path==='/owner/users'&&m==='GET'){if(u.role!=='owner')return B('Akses Owner Web diperlukan.',403);let r=await env.DB.prepare(`SELECT u.id,u.name,u.email,u.status,u.created_at,COALESCE(up.plan,'premium') plan,COALESCE(p.status,'none') payment_status,p.amount FROM users u LEFT JOIN user_plans up ON up.user_id=u.id LEFT JOIN payment_requests p ON p.id=(SELECT id FROM payment_requests WHERE user_id=u.id ORDER BY id DESC LIMIT 1) WHERE u.role='member' ORDER BY u.created_at DESC`).all();return J({users:r.results})}
+ if(/^\/owner\/users\/(activate|suspend)$/.test(path)&&m==='POST'){if(u.role!=='owner')return B('Akses Owner Web diperlukan.',403);let b=await body(request),id=Number(b.userId);if(path.endsWith('activate')){await env.DB.prepare("UPDATE users SET status='active',updated_at=CURRENT_TIMESTAMP WHERE id=? AND role='member'").bind(id).run();await env.DB.prepare("UPDATE payment_requests SET status='paid',reviewed_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=(SELECT id FROM payment_requests WHERE user_id=? ORDER BY id DESC LIMIT 1)").bind(id,id).run()}else await env.DB.prepare("UPDATE users SET status='suspended',updated_at=CURRENT_TIMESTAMP WHERE id=? AND role='member'").bind(id).run();return J({ok:true})}
+ // trees
+ if(path==='/trees'&&m==='GET'){if(u.role==='owner'){let r=await env.DB.prepare('SELECT t.*,u.name creator_name FROM family_trees t JOIN users u ON u.id=t.created_by ORDER BY t.updated_at DESC').all();return J({trees:r.results,readonly:true})}let r=await env.DB.prepare("SELECT t.*,u.name creator_name FROM family_trees t JOIN users u ON u.id=t.created_by WHERE t.created_by=? OR EXISTS(SELECT 1 FROM tree_members tm WHERE tm.tree_id=t.id AND tm.user_id=? AND tm.status='active') ORDER BY t.updated_at DESC").bind(u.id,u.id).all();return J({trees:r.results,readonly:false})}
+ if(path==='/trees'&&m==='POST'){if(u.role!=='member')return B('Owner Web tidak dapat membuat pohon pelanggan.',403);let b=await body(request),n=clean(b.name,150);if(!n)return B('Nama pohon wajib diisi.');let r=await env.DB.prepare('INSERT INTO family_trees(name,description,created_by) VALUES(?,?,?)').bind(n,clean(b.description,1000),u.id).run();return J({id:r.meta.last_row_id},201)}
+ let td=path.match(/^\/trees\/(\d+)$/);if(td&&m==='DELETE'){let t=await tree(env,Number(td[1]));if(!t)return B('Pohon tidak ditemukan.',404);if(!await ownerAccess(env,u,t))return B('Hanya Owner Akun yang dapat menghapus pohon.',403);await env.DB.prepare('DELETE FROM family_trees WHERE id=?').bind(t.id).run();return J({ok:true})}
+ // persons list/create
+ let tp=path.match(/^\/trees\/(\d+)\/persons$/);if(tp){let tid=Number(tp[1]),t=await tree(env,tid);if(!t)return B('Pohon tidak ditemukan.',404);if(m==='GET'){if(u.role==='owner'||t.created_by===u.id||await membership(env,tid,u.id))return J({persons:(await env.DB.prepare('SELECT p.*,pp.show_name,pp.show_age,pp.show_birth_date,pp.show_birth_place,pp.show_photo FROM persons p LEFT JOIN person_privacy pp ON pp.person_id=p.id WHERE p.tree_id=? ORDER BY p.first_name,p.last_name').bind(tid).all()).results,readonly:u.role==='owner'});return B('Tidak memiliki akses.',403)}
+  if(m==='POST'){if(u.role==='owner')return B('Owner Web hanya memiliki akses baca.',403);let owner=t.created_by===u.id,sc=null;if(!owner){sc=await memberScope(env,u,t);if(!sc)return B('Anda bukan Family Member pada pohon ini.',403)}let b=await body(request),first=clean(b.first_name,100);if(!first)return B('Nama depan wajib.');let anchor=Number(b.anchor_person_id||0);if(!owner&&(!anchor||!sc.ids.has(anchor)))return B('Family Member hanya dapat menambah anggota di wilayah aksesnya.',403);let r=await env.DB.prepare('INSERT INTO persons(tree_id,first_name,last_name,gender,birth_date,death_date,birth_place,notes,photo_url) VALUES(?,?,?,?,?,?,?,?,?)').bind(tid,first,clean(b.last_name,100),['male','female','other'].includes(b.gender)?b.gender:'other',clean(b.birth_date,30),clean(b.death_date,30),clean(b.birth_place,200),clean(b.notes,3000),clean(b.photo_url,1000)).run(),pid=r.meta.last_row_id;await env.DB.prepare('INSERT OR IGNORE INTO person_privacy(person_id) VALUES(?)').bind(pid).run();if(anchor&&b.relation_type){let rt=b.relation_type;if(!['parent','spouse'].includes(rt))return B('Relasi tidak valid.');if(owner||sc.ids.has(anchor)){let from=anchor,to=pid;if(rt==='parent'&&b.parent_direction==='child_to_parent'){from=pid;to=anchor}await env.DB.prepare('INSERT OR IGNORE INTO relationships(tree_id,from_person_id,to_person_id,type) VALUES(?,?,?,?)').bind(tid,from,to,rt).run()}}await audit(env,tid,u.id,'create','person',pid);return J({id:pid},201)} }
+ // person edit/get/delete
+ let pd=path.match(/^\/persons\/(\d+)$/);if(pd){let pid=Number(pd[1]),p=await env.DB.prepare('SELECT p.*,t.created_by,t.id tree_id FROM persons p JOIN family_trees t ON t.id=p.tree_id WHERE p.id=?').bind(pid).first();if(!p)return B('Anggota tidak ditemukan.',404);if(m==='GET'){let t=await tree(env,p.tree_id);if(u.role==='owner'||t.created_by===u.id||await membership(env,p.tree_id,u.id))return J({person:p});return B('Tidak memiliki akses.',403)}if(m==='PATCH'){let t=await tree(env,p.tree_id),ok=false;if(u.role==='member'&&t.created_by===u.id)ok=true;else if(u.role==='member'){let sc=await memberScope(env,u,t);ok=!!sc?.ids.has(pid)}if(!ok)return B(u.role==='owner'?'Owner Web hanya memiliki akses baca.':'Anggota berada di luar wilayah akses Anda.',403);let b=await body(request);if(!clean(b.first_name,100))return B('Nama depan wajib.');await env.DB.prepare('UPDATE persons SET first_name=?,last_name=?,gender=?,birth_date=?,death_date=?,birth_place=?,notes=?,photo_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(clean(b.first_name,100),clean(b.last_name,100),['male','female','other'].includes(b.gender)?b.gender:'other',clean(b.birth_date,30),clean(b.death_date,30),clean(b.birth_place,200),clean(b.notes,3000),clean(b.photo_url,1000),pid).run();await audit(env,p.tree_id,u.id,'update','person',pid);return J({ok:true})}if(m==='DELETE'){if(u.role!=='member'||p.created_by!==u.id)return B('Hanya Owner Akun yang dapat menghapus anggota.',403);await env.DB.prepare('DELETE FROM persons WHERE id=?').bind(pid).run();return J({ok:true})}}
+ let pv=path.match(/^\/persons\/(\d+)\/privacy$/);if(pv&&m==='PATCH'){let p=await env.DB.prepare('SELECT p.*,t.created_by,t.id tree_id FROM persons p JOIN family_trees t ON t.id=p.tree_id WHERE p.id=?').bind(Number(pv[1])).first();if(!p)return B('Anggota tidak ditemukan.',404);if(u.role!=='member'||p.created_by!==u.id)return B('Hanya Owner Akun yang dapat mengubah privasi profil publik.',403);let b=await body(request);await env.DB.prepare('INSERT OR REPLACE INTO person_privacy(person_id,show_name,show_age,show_birth_date,show_birth_place,show_photo,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)').bind(p.id,b.show_name?1:0,b.show_age?1:0,b.show_birth_date?1:0,b.show_birth_place?1:0,b.show_photo?1:0).run();return J({ok:true})}
+ // relationships
+ let rr=path.match(/^\/trees\/(\d+)\/relationships$/);if(rr){let tid=Number(rr[1]),t=await tree(env,tid);if(!t)return B('Pohon tidak ditemukan.',404);if(m==='GET'){if(u.role==='owner'||t.created_by===u.id)return J({relationships:(await env.DB.prepare('SELECT * FROM relationships WHERE tree_id=? ORDER BY id').bind(tid).all()).results,readonly:u.role==='owner'});let sc=await memberScope(env,u,t);if(!sc)return B('Tidak memiliki akses.',403);let r=(await env.DB.prepare('SELECT * FROM relationships WHERE tree_id=? ORDER BY id').bind(tid).all()).results.filter(x=>sc.ids.has(x.from_person_id)&&sc.ids.has(x.to_person_id));return J({relationships:r})}if(m==='POST'){if(u.role!=='member')return B('Owner Web hanya memiliki akses baca.',403);let owner=t.created_by===u.id,sc=owner?null:await memberScope(env,u,t);if(!owner&&!sc)return B('Tidak memiliki akses.',403);let b=await body(request),a=Number(b.from_person_id),z=Number(b.to_person_id),type=b.type;if(!a||!z||a===z||!['parent','spouse'].includes(type))return B('Relasi tidak valid.');if(!owner&&(!sc.ids.has(a)||!sc.ids.has(z)))return B('Relasi berada di luar wilayah akses Family Member.',403);let pa=await env.DB.prepare('SELECT id FROM persons WHERE id=? AND tree_id=?').bind(a,tid).first(),pz=await env.DB.prepare('SELECT id FROM persons WHERE id=? AND tree_id=?').bind(z,tid).first();if(!pa||!pz)return B('Anggota relasi tidak ditemukan.',404);await env.DB.prepare('INSERT OR IGNORE INTO relationships(tree_id,from_person_id,to_person_id,type) VALUES(?,?,?,?)').bind(tid,a,z,type).run();await audit(env,tid,u.id,'create','relationship',null,`${type}:${a}->${z}`);return J({ok:true})}}
+ let rd=path.match(/^\/relationships\/(\d+)$/);if(rd&&m==='DELETE'){let r=await env.DB.prepare('SELECT * FROM relationships WHERE id=?').bind(Number(rd[1])).first(),t=r&&await tree(env,r.tree_id);if(!r||!t)return B('Relasi tidak ditemukan.',404);if(u.role!=='member'||t.created_by!==u.id)return B('Hanya Owner Akun yang dapat menghapus relasi.',403);await env.DB.prepare('DELETE FROM relationships WHERE id=?').bind(r.id).run();return J({ok:true})}
+ // public sharing
+ let sh=path.match(/^\/trees\/(\d+)\/share$/);if(sh){let t=await tree(env,Number(sh[1]));if(!t||u.role!=='member'||t.created_by!==u.id)return B('Akses Owner Akun diperlukan.',403);if(m==='GET'){let s=await env.DB.prepare('SELECT * FROM share_tokens WHERE tree_id=?').bind(t.id).first();return J({public:!!s?.is_public,token:s?.token||null,url:s?.is_public?`${new URL(request.url).origin}/f/${s.token}`:null})}if(m==='POST'){let b=await body(request),on=!!b.is_public,s=await env.DB.prepare('SELECT * FROM share_tokens WHERE tree_id=?').bind(t.id).first();if(!s){let tok=rand();await env.DB.prepare('INSERT INTO share_tokens(tree_id,token,is_public) VALUES(?,?,?)').bind(t.id,tok,on?1:0).run();s={token:tok}}else await env.DB.prepare('UPDATE share_tokens SET is_public=?,updated_at=CURRENT_TIMESTAMP WHERE tree_id=?').bind(on?1:0,t.id).run();return J({public:on,token:s.token,url:on?`${new URL(request.url).origin}/f/${s.token}`:null})}}
+ // claims/invitations
+ let cl=path.match(/^\/trees\/(\d+)\/claims$/);if(cl){let t=await tree(env,Number(cl[1]));if(!t||t.created_by!==u.id)return B('Akses Owner Akun diperlukan.',403);if(m==='GET')return J({claims:(await env.DB.prepare(`SELECT c.*,p.first_name,p.last_name,u.name requester_name,u.email requester_email FROM claim_requests c JOIN persons p ON p.id=c.person_id JOIN users u ON u.id=c.requester_id WHERE c.tree_id=? ORDER BY c.created_at DESC`).bind(t.id).all()).results});if(m==='POST'){let b=await body(request),c=await env.DB.prepare("SELECT * FROM claim_requests WHERE id=? AND tree_id=? AND status='pending'").bind(Number(b.claimId),t.id).first();if(!c)return B('Permintaan klaim tidak ditemukan.',404);if(b.action==='approve'){let plan=await planOf(env,u.id),cnt=await env.DB.prepare("SELECT COUNT(*) n FROM tree_members WHERE tree_id=? AND status='active'").bind(t.id).first();if(Number(cnt.n)>=limits(plan).members)return B(`Batas Family Member paket ${plan} tercapai.`,409);await env.DB.prepare("INSERT INTO tree_members(tree_id,user_id,person_id,status) VALUES(?,?,?,'active')").bind(t.id,c.requester_id,c.person_id).run();await env.DB.prepare("UPDATE claim_requests SET status='approved',reviewed_at=CURRENT_TIMESTAMP WHERE id=?").bind(c.id).run()}else await env.DB.prepare("UPDATE claim_requests SET status='rejected',reviewed_at=CURRENT_TIMESTAMP WHERE id=?").bind(c.id).run();return J({ok:true})}}
+ let iv=path.match(/^\/trees\/(\d+)\/invites$/);if(iv){let t=await tree(env,Number(iv[1]));if(!t||t.created_by!==u.id)return B('Akses Owner Akun diperlukan.',403);if(m==='GET')return J({invites:(await env.DB.prepare('SELECT i.*,p.first_name,p.last_name FROM invitations i JOIN persons p ON p.id=i.person_id WHERE i.tree_id=? ORDER BY i.created_at DESC').bind(t.id).all()).results});if(m==='POST'){let b=await body(request),pid=Number(b.personId),e=mail(b.email),p=await env.DB.prepare('SELECT id FROM persons WHERE id=? AND tree_id=?').bind(pid,t.id).first();if(!p||!e.includes('@'))return B('Anggota dan email undangan tidak valid.');let plan=await planOf(env,u.id),cnt=await env.DB.prepare("SELECT COUNT(*) n FROM tree_members WHERE tree_id=? AND status='active'").bind(t.id).first();if(Number(cnt.n)>=limits(plan).members)return B(`Batas Family Member paket ${plan} tercapai.`,409);let tok=rand();await env.DB.prepare('INSERT INTO invitations(tree_id,person_id,invited_email,invited_by,token) VALUES(?,?,?,?,?)').bind(t.id,pid,e,u.id,tok).run();return J({ok:true,inviteUrl:`${new URL(request.url).origin}/invite/${tok}`,token:tok})}}
+ let ia=path.match(/^\/invitations\/([A-Za-z0-9_-]+)$/);if(ia&&m==='POST'){let i=await env.DB.prepare("SELECT * FROM invitations WHERE token=? AND status='pending'").bind(ia[1]).first();if(!i)return B('Undangan tidak ditemukan atau sudah digunakan.',404);if(mail(u.email)!==mail(i.invited_email))return B('Undangan ditujukan untuk email lain.',403);let t=await tree(env,i.tree_id),plan=await planOf(env,t.created_by),cnt=await env.DB.prepare("SELECT COUNT(*) n FROM tree_members WHERE tree_id=? AND status='active'").bind(t.id).first();if(Number(cnt.n)>=limits(plan).members)return B('Batas Family Member tercapai.',409);await env.DB.prepare("INSERT OR REPLACE INTO tree_members(tree_id,user_id,person_id,status,updated_at) VALUES(?,?,?,'active',CURRENT_TIMESTAMP)").bind(i.tree_id,u.id,i.person_id).run();await env.DB.prepare("UPDATE invitations SET status='accepted',responded_at=CURRENT_TIMESTAMP WHERE id=?").bind(i.id).run();return J({ok:true})}
+ if(path==='/claims'&&m==='POST'){let b=await body(request),s=await env.DB.prepare('SELECT * FROM share_tokens WHERE token=? AND is_public=1').bind(clean(b.shareToken,200)).first();if(!s)return B('Link publik tidak valid.',404);let p=await env.DB.prepare('SELECT id FROM persons WHERE id=? AND tree_id=?').bind(Number(b.personId),s.tree_id).first();if(!p)return B('Anggota tidak ditemukan.',404);if((await tree(env,s.tree_id)).created_by===u.id)return B('Owner Akun tidak perlu mengklaim nama sendiri.');let x=await env.DB.prepare("SELECT id FROM claim_requests WHERE tree_id=? AND person_id=? AND requester_id=? AND status='pending'").bind(s.tree_id,p.id,u.id).first();if(x)return B('Klaim sudah diajukan.',409);await env.DB.prepare('INSERT INTO claim_requests(tree_id,person_id,requester_id,note) VALUES(?,?,?,?)').bind(s.tree_id,p.id,u.id,clean(b.note,1000)).run();return J({ok:true,message:'Permintaan klaim dikirim.'},201)}
+ if(path==='/my/invitations'&&m==='GET')return J({invites:(await env.DB.prepare("SELECT i.*,t.name tree_name,p.first_name,p.last_name FROM invitations i JOIN family_trees t ON t.id=i.tree_id JOIN persons p ON p.id=i.person_id WHERE i.invited_email=? AND i.status='pending' ORDER BY i.created_at DESC").bind(u.email).all()).results});
+ if(path==='/my/memberships'&&m==='GET')return J({memberships:(await env.DB.prepare("SELECT tm.*,t.name tree_name,p.first_name,p.last_name FROM tree_members tm JOIN family_trees t ON t.id=tm.tree_id JOIN persons p ON p.id=tm.person_id WHERE tm.user_id=? AND tm.status='active'").bind(u.id).all()).results});
+ if(path==='/my/claims'&&m==='GET')return J({claims:(await env.DB.prepare('SELECT c.*,t.name tree_name,p.first_name,p.last_name FROM claim_requests c JOIN family_trees t ON t.id=c.tree_id JOIN persons p ON p.id=c.person_id WHERE c.requester_id=? ORDER BY c.created_at DESC').bind(u.id).all()).results});
+ let au=path.match(/^\/trees\/(\d+)\/audit$/);if(au&&m==='GET'){let t=await tree(env,Number(au[1]));if(!t||u.role!=='member'||t.created_by!==u.id)return B('Akses Owner Akun diperlukan.',403);return J({logs:(await env.DB.prepare('SELECT a.*,u.name actor_name FROM audit_logs a JOIN users u ON u.id=a.actor_user_id WHERE a.tree_id=? ORDER BY a.created_at DESC LIMIT 200').bind(t.id).all()).results})}
+ return B('Endpoint tidak ditemukan.',404)
 }
