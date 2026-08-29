@@ -1,0 +1,1 @@
+ALTER TABLE persons ADD COLUMN sibling_order INTEGER NOT NULL DEFAULT 0;
