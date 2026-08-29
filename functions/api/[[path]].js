@@ -26,7 +26,7 @@ async function verifyToken(secret, t) {
 async function passwordHash(password, saltB64) {
   const salt=saltB64?fromB64u(saltB64):crypto.getRandomValues(new Uint8Array(16));
   const key=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);
-  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:120000,hash:'SHA-256'},key,256);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},key,256);
   return {hash:b64u(bits),salt:b64u(salt)};
 }
 async function checkPassword(password, hash, salt) { return (await passwordHash(password,salt)).hash===hash; }
