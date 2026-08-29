@@ -1,57 +1,27 @@
-# JejakNasab V3
+# JejakNasab — stable V3 baseline
 
-Upgrade JejakNasab berbasis Cloudflare Pages + D1.
-
-## Paket
-- Premium: maksimal 10 Family Member; 3 generasi ke atas dan 3 ke bawah.
-- Ultimate: maksimal 20 Family Member; 6 generasi ke atas dan 6 ke bawah.
-- Owner akun tidak dibatasi generasi.
-- Pasangan dan saudara langsung tidak dihitung sebagai batas generasi; keturunan saudara mengikuti batas generasi.
-
-## Akses
-- Owner Web/platform: administrasi member dan pembayaran, serta **read-only** untuk pohon pelanggan.
-- Owner Akun: kontrol penuh terhadap pohon miliknya.
-- Family Member: akses berdasarkan posisi dirinya pada pohon dan batas paket.
-- Publik: read-only melalui link share; profil mengikuti privasi per anggota.
-
-## Privasi
-Default publik per anggota:
-- nama: tampil
-- usia: tampil
-- tanggal lahir: sembunyi
-- tempat lahir: sembunyi
-- foto: sembunyi
-
-Hanya Owner Akun yang dapat mengubah privasi publik.
-
-## Data anggota
-Tanggal meninggal opsional. Anggota yang sudah ada dapat diedit.
-
-## Migrasi database yang sudah ada
-**Jangan jalankan schema.sql lama untuk database produksi.**
-Gunakan `migration-v3.sql` satu kali pada D1 produksi karena database kamu sudah memiliki tabel dasar.
-
-Contoh dari lingkungan yang sudah memiliki Wrangler terautentikasi:
-
-```bash
-npx wrangler d1 execute jejaknasab-db --remote --file=migration-v3.sql
-```
-
-Jika memakai Cloudflare Dashboard, buka D1 `jejaknasab-db` dan jalankan isi `migration-v3.sql` pada SQL console.
-
-## Environment variables / secrets
-Production:
-- `SESSION_SECRET`
-- `OWNER_SETUP_KEY`
-- `PREMIUM_PRICE` (contoh 50000)
-- `ULTIMATE_PRICE` (contoh 100000)
-- `PAYMENT_INSTRUCTIONS`
-
-D1 binding harus tetap:
-- Variable name: `DB`
-- Database: `jejaknasab-db`
+Cloudflare Pages + D1, tanpa framework frontend.
 
 ## Deploy
-Project memakai Git integration Cloudflare Pages. Push ke branch `main` untuk deployment otomatis.
+1. Upload isi folder ini ke repository GitHub (jangan upload node_modules).
+2. Cloudflare Pages: connect repository, production branch `main`, build command kosong, build output `public`.
+3. D1 binding: `DB` → database `jejaknasab-db`.
+4. Variables/Secrets: `SESSION_SECRET`, `OWNER_SETUP_KEY`, `PREMIUM_PRICE`, `ULTIMATE_PRICE`, `PAYMENT_INSTRUCTIONS`.
+5. Buka `/setup-owner` hanya sekali untuk membuat Owner Web.
 
-Pastikan `node_modules/` tidak masuk Git.
+## Database
+`schema.sql` adalah schema lengkap untuk database baru.
+`migration-v3.sql` aman dijalankan pada database lama yang sudah memiliki tabel dasar.
+
+Versi ini juga melakukan pemeriksaan ringan saat API pertama kali dipanggil untuk membuat tabel tambahan V3 jika belum ada, sehingga halaman tidak langsung blank hanya karena migration tambahan belum dijalankan.
+
+## Paket
+Premium: 10 Family Member, 3 generasi atas + 3 bawah.
+Ultimate: 20 Family Member, 6 generasi atas + 6 bawah.
+Owner akun bebas generasi. Pasangan/saudara langsung tidak mengurangi batas generasi; keturunan saudara mengikuti batas generasi.
+
+## Akses
+- Owner Web: administrasi pelanggan dan lihat silsilah pelanggan read-only.
+- Owner Akun: kelola penuh silsilah.
+- Family Member: akses/edit sesuai posisi dan batas paket.
+- Public: hanya melihat informasi yang diizinkan Owner akun.
