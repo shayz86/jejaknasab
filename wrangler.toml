@@ -5,4 +5,4 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "jejaknasab-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "ddf3a0a8-a1db-41d0-a066-d3551a604a73"
