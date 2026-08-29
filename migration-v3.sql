@@ -35,12 +35,15 @@ CREATE TABLE IF NOT EXISTS invitations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tree_id INTEGER NOT NULL,
   person_id INTEGER NOT NULL,
-  invited_email TEXT NOT NULL,
+  invited_email TEXT NOT NULL DEFAULT '',
+  invited_phone TEXT DEFAULT '',
   invited_by INTEGER NOT NULL,
+  requester_id INTEGER,
   token TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL CHECK(status IN ('pending','accepted','rejected','expired')) DEFAULT 'pending',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   responded_at TEXT DEFAULT '',
+  requested_at TEXT DEFAULT '',
   FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE,
   FOREIGN KEY(person_id) REFERENCES persons(id) ON DELETE CASCADE,
   FOREIGN KEY(invited_by) REFERENCES users(id) ON DELETE CASCADE
@@ -85,3 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_invite_token ON invitations(token,status);
 CREATE INDEX IF NOT EXISTS idx_audit_tree ON audit_logs(tree_id,created_at);
 INSERT OR IGNORE INTO user_plans(user_id,plan) SELECT id,'premium' FROM users WHERE role='member';
 INSERT OR IGNORE INTO person_privacy(person_id) SELECT id FROM persons;
+
+-- Safe upgrades for existing D1 invitations table
+ALTER TABLE invitations ADD COLUMN invited_phone TEXT DEFAULT '';
+ALTER TABLE invitations ADD COLUMN requester_id INTEGER;
+ALTER TABLE invitations ADD COLUMN requested_at TEXT DEFAULT '';

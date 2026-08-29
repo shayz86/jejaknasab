@@ -1,27 +1,38 @@
-# JejakNasab — stable V3 baseline
+# JejakNasab — stable V4
 
 Cloudflare Pages + D1, tanpa framework frontend.
+
+## Perbaikan V4
+- Tanggal lahir dan tanggal meninggal pada form anggota memiliki label yang jelas. Tanggal meninggal **opsional**, kosong berarti masih hidup/belum dicatat.
+- Edit anggota memakai form lengkap: nama depan, nama belakang, gender, tanggal lahir, tanggal meninggal, tempat lahir, catatan, dan URL foto. Semua field dapat diubah atau dikosongkan.
+- Pengaturan **Info Publik** per anggota: Nama, Usia, Tanggal lahir, Tempat lahir, Foto.
+- Pohon publik sekarang menampilkan data sesuai privasi dan relasi pasangan, bukan nama saja.
+- Link publik baru memakai token pendek agar URL lebih ringkas. Token lama otomatis dipendekkan saat Owner membuka pengaturan publik.
+- Undangan Family Member tidak lagi meminta ID anggota. Owner memilih anggota dari dropdown.
+- Undangan dapat dibuat dengan email atau nomor WhatsApp, lalu link dapat dikirim melalui WhatsApp, email, atau disalin.
+- Penerima tetap harus mendaftar sebagai Member/Family Member. Setelah login, penerima mengajukan bergabung dan Owner Akun harus **Terima/Tolak** sebelum akses Family Member aktif.
+- Batas satu silsilah per Owner Akun tetap dijaga oleh backend.
 
 ## Deploy
 1. Upload isi folder ini ke repository GitHub (jangan upload node_modules).
 2. Cloudflare Pages: connect repository, production branch `main`, build command kosong, build output `public`.
-3. D1 binding: `DB` → database `jejaknasab-db`.
+3. D1 binding: `DB` → database JejakNasab.
 4. Variables/Secrets: `SESSION_SECRET`, `OWNER_SETUP_KEY`, `PREMIUM_PRICE`, `ULTIMATE_PRICE`, `PAYMENT_INSTRUCTIONS`.
-5. Buka `/setup-owner` hanya sekali untuk membuat Owner Web.
+5. `/setup-owner` hanya digunakan sekali untuk membuat Owner Web.
 
 ## Database
 `schema.sql` adalah schema lengkap untuk database baru.
-`migration-v3.sql` aman dijalankan pada database lama yang sudah memiliki tabel dasar.
+`migration-v3.sql` berisi migration sebelumnya; API V4 juga melakukan upgrade ringan otomatis pada tabel undangan untuk database lama dengan menambahkan kolom yang diperlukan jika belum ada.
 
-Versi ini juga melakukan pemeriksaan ringan saat API pertama kali dipanggil untuk membuat tabel tambahan V3 jika belum ada, sehingga halaman tidak langsung blank hanya karena migration tambahan belum dijalankan.
+**Jangan reset atau hapus database D1 yang sudah berisi data.**
 
 ## Paket
-Premium: 10 Family Member, 3 generasi atas + 3 bawah.
-Ultimate: 20 Family Member, 6 generasi atas + 6 bawah.
-Owner akun bebas generasi. Pasangan/saudara langsung tidak mengurangi batas generasi; keturunan saudara mengikuti batas generasi.
+- Premium: 10 Family Member, 3 generasi atas + 3 bawah.
+- Ultimate: 20 Family Member, 6 generasi atas + 6 bawah.
+- Owner akun bebas generasi.
 
 ## Akses
 - Owner Web: administrasi pelanggan dan lihat silsilah pelanggan read-only.
-- Owner Akun: kelola penuh silsilah.
+- Owner Akun: kelola penuh satu silsilah miliknya, termasuk publikasi, privasi, undangan, dan persetujuan Family Member.
 - Family Member: akses/edit sesuai posisi dan batas paket.
-- Public: hanya melihat informasi yang diizinkan Owner akun.
+- Public: hanya melihat informasi yang diizinkan Owner Akun.
