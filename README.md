@@ -1,41 +1,57 @@
-# JejakNasab V2
+# JejakNasab V3
 
-Aplikasi silsilah keluarga untuk Cloudflare Pages + Cloudflare D1. Tidak membutuhkan server VPS.
+Upgrade JejakNasab berbasis Cloudflare Pages + D1.
 
-## Fitur
-- Login Owner dan Member.
-- Registrasi member baru berbayar: akun masuk status `pending` sampai owner mengaktifkan setelah pembayaran.
-- Owner dapat melihat pendaftar, mengaktifkan/menangguhkan member, dan mengelola pohon keluarga.
-- Member aktif dapat membuat pohon keluarga sendiri dan mengelola anggota serta hubungan orang tua/pasangan.
-- Tampilan silsilah sederhana, responsif, tanpa framework frontend.
-- Password disimpan dengan PBKDF2-SHA-256 + salt, bukan plaintext.
-- Session memakai cookie HttpOnly + HMAC signed token.
-- Database memakai Cloudflare D1.
+## Paket
+- Premium: maksimal 10 Family Member; 3 generasi ke atas dan 3 ke bawah.
+- Ultimate: maksimal 20 Family Member; 6 generasi ke atas dan 6 ke bawah.
+- Owner akun tidak dibatasi generasi.
+- Pasangan dan saudara langsung tidak dihitung sebagai batas generasi; keturunan saudara mengikuti batas generasi.
 
-## Deploy gratis Cloudflare
-1. Buat repository GitHub baru, lalu upload seluruh isi folder ini.
-2. Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git.
-3. Pilih repository. Build command kosong; output directory `public`.
-4. Buat D1 Database bernama `jejaknasab-db`.
-5. Ganti `REPLACE_WITH_YOUR_D1_DATABASE_ID` di `wrangler.toml` dengan database ID D1.
-6. Jalankan:
-   `npx wrangler d1 execute jejaknasab-db --remote --file=schema.sql`
-7. Deploy Pages.
-8. Di Cloudflare Pages -> Settings -> Variables and Secrets, tambahkan:
-   - `SESSION_SECRET`: string acak panjang (minimal 32 karakter).
-   - `OWNER_SETUP_KEY`: string rahasia untuk membuat owner pertama.
-   - `MEMBERSHIP_PRICE`: harga pendaftaran, contoh `50000`.
-   - `PAYMENT_INSTRUCTIONS`: instruksi pembayaran, contoh rekening/e-wallet Anda.
-9. Buka `https://DOMAIN-ANDA.pages.dev/setup-owner` dan buat owner pertama menggunakan `OWNER_SETUP_KEY`. Route ini ditangani oleh frontend, jadi Cloudflare Pages akan tetap menyajikan `index.html` dan aplikasi akan menampilkan halaman Setup Owner.
-10. Setelah owner berhasil dibuat, halaman setup tidak dapat dipakai lagi.
+## Akses
+- Owner Web/platform: administrasi member dan pembayaran, serta **read-only** untuk pohon pelanggan.
+- Owner Akun: kontrol penuh terhadap pohon miliknya.
+- Family Member: akses berdasarkan posisi dirinya pada pohon dan batas paket.
+- Publik: read-only melalui link share; profil mengikuti privasi per anggota.
 
-## Catatan pembayaran
-Versi ini menggunakan aktivasi pembayaran manual agar benar-benar bisa berjalan tanpa layanan pembayaran berbayar. Member mendaftar -> akun pending -> melakukan pembayaran sesuai instruksi -> owner memeriksa -> owner klik Aktifkan.
+## Privasi
+Default publik per anggota:
+- nama: tampil
+- usia: tampil
+- tanggal lahir: sembunyi
+- tempat lahir: sembunyi
+- foto: sembunyi
 
-Untuk pembayaran otomatis, backend dapat ditambahkan integrasi Midtrans/Xendit/Tripay tanpa mengubah model data utama.
+Hanya Owner Akun yang dapat mengubah privasi publik.
 
-## Lokal
-`npm install`
-`npx wrangler pages dev public`
+## Data anggota
+Tanggal meninggal opsional. Anggota yang sudah ada dapat diedit.
 
-Untuk lokal dengan D1, gunakan binding D1 sesuai dokumentasi Wrangler.
+## Migrasi database yang sudah ada
+**Jangan jalankan schema.sql lama untuk database produksi.**
+Gunakan `migration-v3.sql` satu kali pada D1 produksi karena database kamu sudah memiliki tabel dasar.
+
+Contoh dari lingkungan yang sudah memiliki Wrangler terautentikasi:
+
+```bash
+npx wrangler d1 execute jejaknasab-db --remote --file=migration-v3.sql
+```
+
+Jika memakai Cloudflare Dashboard, buka D1 `jejaknasab-db` dan jalankan isi `migration-v3.sql` pada SQL console.
+
+## Environment variables / secrets
+Production:
+- `SESSION_SECRET`
+- `OWNER_SETUP_KEY`
+- `PREMIUM_PRICE` (contoh 50000)
+- `ULTIMATE_PRICE` (contoh 100000)
+- `PAYMENT_INSTRUCTIONS`
+
+D1 binding harus tetap:
+- Variable name: `DB`
+- Database: `jejaknasab-db`
+
+## Deploy
+Project memakai Git integration Cloudflare Pages. Push ke branch `main` untuk deployment otomatis.
+
+Pastikan `node_modules/` tidak masuk Git.
