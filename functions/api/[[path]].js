@@ -40,9 +40,29 @@ function requireRole(user, role) { return user && (user.role===role || user.role
 export async function onRequest(context) {
   const {request,env,params}=context;
   if(!env.DB) return bad('D1 binding DB belum dikonfigurasi.',500);
-  if(!env.SESSION_SECRET) return bad('SESSION_SECRET belum dikonfigurasi.',500);
   const rawPath=params.path; const path='/' + (Array.isArray(rawPath)?rawPath.join('/'):String(rawPath||''));
   const method=request.method;
+
+  // Setup Owner harus dapat dijalankan tanpa SESSION_SECRET/session login.
+  // SESSION_SECRET hanya wajib untuk endpoint yang membutuhkan autentikasi.
+  if(path==='/setup-owner' && method==='POST') {
+    const b=await body(request);
+    if(!env.OWNER_SETUP_KEY) return bad('OWNER_SETUP_KEY belum dikonfigurasi di Cloudflare.',500);
+    if(b.setupKey!==env.OWNER_SETUP_KEY) return bad('Setup key salah.',403);
+    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='owner'").first();
+    if(Number(count?.n||0)>0) return bad('Owner sudah dibuat.',409);
+    const name=clean(b.name,120), em=email(b.email), pw=String(b.password||'');
+    if(name.length<2||!em.includes('@')||pw.length<8) return bad('Data owner tidak valid. Password minimal 8 karakter.');
+    const ph=await passwordHash(pw);
+    try {
+      await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(name,em,ph.hash,ph.salt).run();
+    } catch(e) {
+      return bad('Gagal membuat Owner di database: '+String(e?.message||e),500);
+    }
+    return json({ok:true,message:'Owner berhasil dibuat. Silakan login.'});
+  }
+
+  if(!env.SESSION_SECRET) return bad('SESSION_SECRET belum dikonfigurasi di Cloudflare.',500);
   const me=await auth(request,env);
 
   if(path==='/config' && method==='GET') return json({price:Number(env.MEMBERSHIP_PRICE||50000), paymentInstructions:env.PAYMENT_INSTRUCTIONS||'Hubungi owner untuk instruksi pembayaran.'});
@@ -69,17 +89,6 @@ export async function onRequest(context) {
     return json({ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}},200,{'Set-Cookie':cookie('jn_session',t)});
   }
   if(path==='/logout' && method==='POST') return json({ok:true},200,{'Set-Cookie':cookie('jn_session','',0)});
-  if(path==='/setup-owner' && method==='POST') {
-    const b=await body(request);
-    if(!env.OWNER_SETUP_KEY || b.setupKey!==env.OWNER_SETUP_KEY) return bad('Setup key salah.',403);
-    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='owner'").first();
-    if(Number(count.n)>0) return bad('Owner sudah dibuat.',409);
-    const name=clean(b.name,120), em=email(b.email), pw=String(b.password||'');
-    if(name.length<2||!em.includes('@')||pw.length<8) return bad('Data owner tidak valid.');
-    const ph=await passwordHash(pw);
-    await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(name,em,ph.hash,ph.salt).run();
-    return json({ok:true,message:'Owner berhasil dibuat. Silakan login.'});
-  }
   if(!me) return bad('Login diperlukan.',401);
 
   if(path==='/owner/users' && method==='GET') {
