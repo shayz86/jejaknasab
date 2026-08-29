@@ -26,7 +26,7 @@ Aplikasi silsilah keluarga untuk Cloudflare Pages + Cloudflare D1. Tidak membutu
    - `OWNER_SETUP_KEY`: string rahasia untuk membuat owner pertama.
    - `MEMBERSHIP_PRICE`: harga pendaftaran, contoh `50000`.
    - `PAYMENT_INSTRUCTIONS`: instruksi pembayaran, contoh rekening/e-wallet Anda.
-9. Buka `/setup-owner` dan buat owner pertama menggunakan `OWNER_SETUP_KEY`.
+9. Buka `https://DOMAIN-ANDA.pages.dev/setup-owner` dan buat owner pertama menggunakan `OWNER_SETUP_KEY`. Route ini ditangani oleh frontend, jadi Cloudflare Pages akan tetap menyajikan `index.html` dan aplikasi akan menampilkan halaman Setup Owner.
 10. Setelah owner berhasil dibuat, halaman setup tidak dapat dipakai lagi.
 
 ## Catatan pembayaran
