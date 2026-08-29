@@ -1,2 +1,0 @@
-CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT,token_hash TEXT NOT NULL UNIQUE,email TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL DEFAULT (unixepoch()*1000));
-CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
