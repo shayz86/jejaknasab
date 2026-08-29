@@ -1,0 +1,1 @@
+ALTER TABLE person_privacy ADD COLUMN show_notes INTEGER NOT NULL DEFAULT 0;
