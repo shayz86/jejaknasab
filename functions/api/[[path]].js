@@ -72,7 +72,11 @@ export async function onRequest({request,env}){
   const r=await env.DB.prepare("SELECT t.*,u.name creator_name FROM family_trees t JOIN users u ON u.id=t.created_by WHERE t.created_by=? OR EXISTS(SELECT 1 FROM tree_members tm WHERE tm.tree_id=t.id AND tm.user_id=? AND tm.status='active') ORDER BY t.updated_at DESC").bind(u.id,u.id).all();return J({trees:r.results||[],readonly:false})
  }
  if(path==='/trees'&&m==='POST'){
-  if(u.role!=='member')return B('Owner Web tidak dapat membuat pohon pelanggan.',403);const b=await body(request),n=clean(b.name,150);if(!n)return B('Nama silsilah wajib diisi.');const r=await env.DB.prepare('INSERT INTO family_trees(name,description,created_by) VALUES(?,?,?)').bind(n,clean(b.description,1000),u.id).run();return J({id:r.meta.last_row_id},201)
+  if(u.role!=='member')return B('Owner Web tidak dapat membuat pohon pelanggan.',403);
+  const b=await body(request),n=clean(b.name,150);if(!n)return B('Nama silsilah wajib diisi.');
+  const existing=await env.DB.prepare('SELECT id FROM family_trees WHERE created_by=? LIMIT 1').bind(u.id).first();
+  if(existing)return B('Akun Anda sudah memiliki satu silsilah. Satu Owner Akun hanya dapat membuat satu silsilah.',409);
+  const r=await env.DB.prepare('INSERT INTO family_trees(name,description,created_by) VALUES(?,?,?)').bind(n,clean(b.description,1000),u.id).run();return J({id:r.meta.last_row_id},201)
  }
  const td=path.match(/^\/trees\/(\d+)$/);if(td&&m==='DELETE'){const t=await tree(env,Number(td[1]));if(!t)return B('Silsilah tidak ditemukan.',404);if(!(await ownerAccess(u,t)))return B('Hanya Owner Akun yang dapat menghapus silsilah.',403);await env.DB.prepare('DELETE FROM family_trees WHERE id=?').bind(t.id).run();return J({ok:true})}
  const tp=path.match(/^\/trees\/(\d+)\/persons$/);if(tp){
