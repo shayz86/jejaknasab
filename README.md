@@ -39,3 +39,13 @@ Cloudflare Pages + D1, tanpa framework frontend.
 
 ## V5.1
 Perbaikan: nama silsilah manual/otomatis, edit nama silsilah, profil publik interaktif, salin link dengan fallback, garis relasi, dan upgrade Premium ke Ultimate diskon 40%.
+
+
+## V5.4 perubahan terakhir
+- Edit silsilah: nama manual atau default otomatis mengikuti laki-laki teratas.
+- Arah relasi: anggota baru dapat menjadi anak atau orang tua dari anggota yang dipilih.
+- Edit anggota mencakup seluruh data dan tanggal meninggal opsional.
+- Undangan Family Member memakai pilihan nama, email/WhatsApp, lalu persetujuan Owner Akun.
+- Link publik memiliki tombol buka, salin dengan fallback browser HP, konfirmasi private, dan anti-cache.
+- Urutan anak disimpan berdasarkan `sibling_order` dan dipakai juga oleh pohon publik.
+- Daftar anggota dibuat ringkas dalam dropdown dan diurutkan dari generasi teratas; laki-laki lebih dulu pada generasi yang sama.
