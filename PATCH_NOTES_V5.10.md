@@ -1,10 +1,10 @@
 # JejakNasab V5.10
 
-Perbaikan berdasarkan pengujian V5.9.
-
-- Perbaikan endpoint undangan dengan fallback query `/api/invite?token=...` dan `/api/invitations?token=...` untuk menghindari `Endpoint tidak ditemukan` pada link WhatsApp/browser tertentu.
-- Pendaftaran melalui undangan Family Member tidak lagi meminta Premium/Ultimate dan tidak membuat payment request. Akun Family Member langsung aktif, paket mengikuti Owner Akun, lalu menunggu persetujuan Owner untuk menjadi anggota silsilah.
-- Form pendaftaran undangan tidak menampilkan pilihan paket.
-- Tombol Salin kini mencoba metode legacy secara sinkron terlebih dahulu, kemudian Clipboard API; jika browser tetap memblokir, muncul kotak teks yang dapat ditekan lama untuk disalin.
-- Dashboard membedakan mode Family Member dan Owner Akun; opsi upgrade hanya ditampilkan untuk akun yang memang memiliki silsilah sendiri.
-- Link undangan lama berbasis `/invite/<token>` tetap didukung.
+- Memperbaiki alur undangan dengan endpoint query `/api/invite?token=...` agar link undangan tidak bergantung pada route nested.
+- Link undangan baru memakai `/invite?token=...`; link lama `/invite/<token>` tetap dapat dibuka dan akan memakai endpoint query baru.
+- Pendaftaran melalui undangan / klaim menjadi Family Member tanpa pilihan Premium/Ultimate dan tanpa pembayaran terpisah.
+- Akun Family Member hasil undangan langsung aktif untuk login dan permintaan bergabung dicatat otomatis.
+- Dashboard membedakan Family Member dan Owner Akun; Family Member tidak mendapat kartu upgrade Premium/Ultimate.
+- Hak akses generasi Family Member dihitung berdasarkan paket Owner Akun dari silsilah yang diikuti.
+- Tombol Salin memiliki fallback modal teks yang dapat dipilih manual di Android serta opsi Bagikan jika tersedia.
+- Salin/Bagikan tetap mempertahankan alur tombol yang ada.
