@@ -1,4 +1,4 @@
-# JejakNasab — stable V4
+# JejakNasab — V5.17
 
 Cloudflare Pages + D1, tanpa framework frontend.
 
@@ -49,3 +49,21 @@ Perbaikan: nama silsilah manual/otomatis, edit nama silsilah, profil publik inte
 - Link publik memiliki tombol buka, salin dengan fallback browser HP, konfirmasi private, dan anti-cache.
 - Urutan anak disimpan berdasarkan `sibling_order` dan dipakai juga oleh pohon publik.
 - Daftar anggota dibuat ringkas dalam dropdown dan diurutkan dari generasi teratas; laki-laki lebih dulu pada generasi yang sama.
+
+## V5.17 — Nasab Ayah & Multi-Pasangan
+
+V5.17 memperkuat identitas JejakNasab sebagai aplikasi nasab berbasis garis ayah.
+
+- Root silsilah utama disimpan pada `family_trees.root_person_id` dan diprioritaskan laki-laki.
+- Dashboard Owner Akun, Family Member, Owner Web read-only, dan publik memakai root yang sama.
+- Hubungan orang tua → anak menentukan generasi; `sibling_order` menentukan urutan saudara.
+- Relasi pasangan menyimpan status aktif/berakhir serta tanggal mulai/berakhir.
+- Seorang laki-laki dapat memiliki beberapa istri; seorang perempuan hanya memiliki satu suami aktif.
+- Jika suami sebelumnya tercatat wafat, hubungan lama dapat diakhiri otomatis ketika pasangan berikutnya dicatat.
+- Riwayat pasangan tidak dihapus.
+- Owner Akun dapat mengakhiri hubungan pasangan dari menu **Pasangan & Riwayat**.
+- Garis pasangan digambar di antara kotak; garis keturunan turun dari tengah unit pasangan ke garis anak lalu ke setiap anak.
+
+### Migrasi V5.17
+
+Untuk database D1 yang sudah dipakai, jalankan `migration-v5.17.sql` satu kali. Jangan menjalankan `schema.sql` untuk mereset database produksi dan jangan menghapus database lama.

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS family_trees (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   auto_name INTEGER NOT NULL DEFAULT 0,
+  root_person_id INTEGER,
   FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -46,6 +47,9 @@ CREATE TABLE IF NOT EXISTS relationships (
   from_person_id INTEGER NOT NULL,
   to_person_id INTEGER NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('parent','spouse')),
+  spouse_status TEXT NOT NULL DEFAULT 'active',
+  start_date TEXT DEFAULT '',
+  end_date TEXT DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(tree_id, from_person_id, to_person_id, type),
   FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE,
@@ -166,3 +170,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_tree ON audit_logs(tree_id,created_at);
 -- Backfill safe defaults for existing users/persons when this schema is applied to a new DB.
 INSERT OR IGNORE INTO user_plans(user_id,plan) SELECT id,'premium' FROM users WHERE role='member';
 INSERT OR IGNORE INTO person_privacy(person_id) SELECT id FROM persons;
+
+CREATE INDEX IF NOT EXISTS idx_tree_root ON family_trees(root_person_id);
+CREATE INDEX IF NOT EXISTS idx_relationship_spouse_status ON relationships(tree_id,type,spouse_status,end_date);
