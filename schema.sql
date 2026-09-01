@@ -173,3 +173,7 @@ INSERT OR IGNORE INTO person_privacy(person_id) SELECT id FROM persons;
 
 CREATE INDEX IF NOT EXISTS idx_tree_root ON family_trees(root_person_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_spouse_status ON relationships(tree_id,type,spouse_status,end_date);
+
+CREATE TABLE IF NOT EXISTS optional_lineages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, tree_id INTEGER NOT NULL, anchor_person_id INTEGER NOT NULL, linked_person_id INTEGER NOT NULL, relation_label TEXT NOT NULL DEFAULT 'Keluarga', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tree_id,anchor_person_id,linked_person_id), FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE, FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE, FOREIGN KEY(linked_person_id) REFERENCES persons(id) ON DELETE CASCADE
+);

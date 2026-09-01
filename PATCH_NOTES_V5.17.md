@@ -1,37 +1,23 @@
-# JejakNasab V5.17 — Nasab Ayah & Multi-Pasangan
+# JejakNasab V5.17 — Fix Patch
 
-## Fokus utama
-
-V5.17 menjadikan struktur silsilah utama konsisten dengan konsep **Nasab**: root/generasi teratas diprioritaskan laki-laki dan disimpan secara eksplisit pada `family_trees.root_person_id`.
-
-### Pohon nasab
-- Root utama disimpan di database, bukan ditebak berbeda oleh masing-masing tampilan.
-- Dashboard Owner Akun, Dashboard Family Member, Owner Web read-only, dan link publik menggunakan root yang sama.
-- Backfill database memilih laki-laki tanpa orang tua terlebih dahulu.
-- Jika tidak ada laki-laki top-level, sistem memakai anggota top-level sebagai fallback.
-- Renderer tetap memakai hubungan `parent` untuk menentukan generasi dan `sibling_order` untuk urutan anak.
-
-### Pasangan
-- Relasi pasangan sekarang menyimpan `spouse_status`, `start_date`, dan `end_date`.
-- Seorang laki-laki dapat mempunyai beberapa istri aktif.
-- Seorang perempuan hanya boleh mempunyai satu suami aktif.
-- Jika suami sebelumnya sudah tercatat wafat, hubungan lama otomatis diakhiri menggunakan tanggal wafat sehingga istri dapat dicatat mempunyai suami berikutnya.
-- Relasi pasangan harus laki-laki ↔ perempuan.
-- Riwayat pasangan tidak dihapus saat pasangan baru dibuat.
-- Owner Akun dapat mengakhiri relasi pasangan dengan tanggal berakhir.
-
-### Garis pohon
-- Pasangan digambar dalam satu unit keluarga horizontal.
-- Garis pasangan berada di antara kotak, bukan menempel pada kotak kiri.
-- Garis vertikal turun dari unit pasangan ke garis horizontal anak.
-- Anak mempunyai konektor vertikal sendiri dari garis keturunan ke kotaknya.
-- Beberapa istri ditampilkan dalam unit pasangan yang sama agar suami tidak dianggap sebagai generasi baru.
+## Perbaikan utama
+- Memisahkan **Silsilah Opsional** dari garis nasab utama.
+- Relasi opsional disimpan pada tabel `optional_lineages`, bukan pada `relationships` utama.
+- Anggota yang belum terhubung ke root **tidak lagi ditampilkan sebagai `Anggota lain` di halaman publik**.
+- Owner Akun dapat membuat cabang opsional melalui tombol **Silsilah Opsional**.
+- Contoh: pilih `Nur Rahmalia` sebagai titik cabang, pilih ayahnya (mis. `Romli`) sebagai anggota opsional, lalu pilih hubungan `Ayah`.
+- Cabang tersebut tampil terpisah sebagai **Silsilah Opsional**, sehingga ayah Nur tidak masuk ke garis nasab utama.
+- Model connector utama diperbarui menjadi: pasangan → garis vertikal dari titik tengah pasangan → garis horizontal anak → garis vertikal ke setiap anak.
+- Relasi `optional_lineages` tidak memengaruhi root, perhitungan generasi, sibling order, atau garis nasab utama.
+- Endpoint baru: `/api/trees/:id/optional-lineages` dengan GET/POST/DELETE.
 
 ## Database
-- Tambahkan `family_trees.root_person_id`.
-- Tambahkan `relationships.spouse_status`, `start_date`, `end_date`.
-- Gunakan `migration-v5.17.sql` untuk database D1 yang sudah ada.
-- Jangan reset database produksi.
+Migration aman untuk database lama dan tidak menghapus data.
 
-## Catatan kompatibilitas
-Data V5.16 tetap dipakai. Relasi spouse lama dianggap aktif sampai diberi tanggal/status akhir.
+Jalankan:
+
+```bash
+npx wrangler d1 execute jejaknasab-db --remote --file=migration-v5.17.sql
+```
+
+Jika tabel sudah pernah dibuat, `CREATE TABLE IF NOT EXISTS` tidak akan mereset data.
