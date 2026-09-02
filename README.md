@@ -67,3 +67,6 @@ V5.17 memperkuat identitas JejakNasab sebagai aplikasi nasab berbasis garis ayah
 ### Migrasi V5.17
 
 Untuk database D1 yang sudah dipakai, jalankan `migration-v5.17.sql` satu kali. Jangan menjalankan `schema.sql` untuk mereset database produksi dan jangan menghapus database lama.
+
+## V5.21
+Perbaikan konsistensi graph/root pada dashboard Family Member agar pohon silsilah dan daftar Silsilah Opsional mengikuti data yang sama dengan Owner dan link publik.
