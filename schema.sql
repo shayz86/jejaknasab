@@ -1,4 +1,20 @@
-PRAGMA foreign_keys = ON;
+PR
+
+CREATE TABLE IF NOT EXISTS optional_child_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tree_id INTEGER NOT NULL,
+  anchor_person_id INTEGER NOT NULL,
+  parent_person_id INTEGER NOT NULL,
+  child_person_id INTEGER NOT NULL,
+  sibling_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tree_id, anchor_person_id, parent_person_id, child_person_id),
+  FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE,
+  FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE,
+  FOREIGN KEY(parent_person_id) REFERENCES persons(id) ON DELETE CASCADE,
+  FOREIGN KEY(child_person_id) REFERENCES persons(id) ON DELETE CASCADE
+);AGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,5 +191,5 @@ CREATE INDEX IF NOT EXISTS idx_tree_root ON family_trees(root_person_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_spouse_status ON relationships(tree_id,type,spouse_status,end_date);
 
 CREATE TABLE IF NOT EXISTS optional_lineages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, tree_id INTEGER NOT NULL, anchor_person_id INTEGER NOT NULL, linked_person_id INTEGER NOT NULL, relation_label TEXT NOT NULL DEFAULT 'Keluarga', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tree_id,anchor_person_id,linked_person_id), FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE, FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE, FOREIGN KEY(linked_person_id) REFERENCES persons(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT, tree_id INTEGER NOT NULL, anchor_person_id INTEGER NOT NULL, linked_person_id INTEGER NOT NULL, relation_label TEXT NOT NULL DEFAULT 'Keluarga', sibling_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tree_id,anchor_person_id,linked_person_id), FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE, FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE, FOREIGN KEY(linked_person_id) REFERENCES persons(id) ON DELETE CASCADE
 );

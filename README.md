@@ -68,5 +68,15 @@ V5.17 memperkuat identitas JejakNasab sebagai aplikasi nasab berbasis garis ayah
 
 Untuk database D1 yang sudah dipakai, jalankan `migration-v5.17.sql` satu kali. Jangan menjalankan `schema.sql` untuk mereset database produksi dan jangan menghapus database lama.
 
-## V5.21
-Perbaikan konsistensi graph/root pada dashboard Family Member agar pohon silsilah dan daftar Silsilah Opsional mengikuti data yang sama dengan Owner dan link publik.
+## V5.20 — Search Dropdown & Silsilah Opsional
+
+- Search anggota menjadi bagian dari dropdown **Hubungkan ke anggota yang sudah ada**.
+- Dashboard hanya menampilkan daftar anggota utama yang memiliki silsilah opsional.
+- Pohon opsional dibuka melalui modal agar dashboard tetap ringkas.
+- Cabang opsional otomatis membawa pasangan dan keturunan anchor dari relasi utama.
+- Urutan anak opsional disimpan terpisah melalui `optional_child_orders` dan tidak mengubah urutan anak silsilah utama.
+- Public optional tree juga menerima pasangan dan keturunan anchor.
+
+### Migrasi V5.20
+
+Untuk database D1 yang sudah memakai V5.19, jalankan `migration-v5.20.sql` satu kali. API akan mencoba membuat tabel tersebut otomatis bila belum ada.
