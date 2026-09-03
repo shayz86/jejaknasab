@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS persons (
   tree_id INTEGER NOT NULL,
   first_name TEXT NOT NULL,
   last_name TEXT DEFAULT '',
+  title_prefix TEXT NOT NULL DEFAULT '',
+  title_suffix TEXT NOT NULL DEFAULT '',
   gender TEXT CHECK(gender IN ('male','female','other')) DEFAULT 'other',
   birth_date TEXT DEFAULT '',
   death_date TEXT DEFAULT '',
@@ -36,6 +38,7 @@ CREATE TABLE IF NOT EXISTS persons (
   notes TEXT DEFAULT '',
   photo_url TEXT DEFAULT '',
   sibling_order INTEGER NOT NULL DEFAULT 0,
+  main_visible INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE
@@ -174,6 +177,38 @@ INSERT OR IGNORE INTO person_privacy(person_id) SELECT id FROM persons;
 CREATE INDEX IF NOT EXISTS idx_tree_root ON family_trees(root_person_id);
 CREATE INDEX IF NOT EXISTS idx_relationship_spouse_status ON relationships(tree_id,type,spouse_status,end_date);
 
-CREATE TABLE IF NOT EXISTS optional_lineages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, tree_id INTEGER NOT NULL, anchor_person_id INTEGER NOT NULL, linked_person_id INTEGER NOT NULL, relation_label TEXT NOT NULL DEFAULT 'Keluarga', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tree_id,anchor_person_id,linked_person_id), FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE, FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE, FOREIGN KEY(linked_person_id) REFERENCES persons(id) ON DELETE CASCADE
+
+CREATE TABLE IF NOT EXISTS family_branches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tree_id INTEGER NOT NULL,
+  anchor_person_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  created_by INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tree_id,anchor_person_id),
+  FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE,
+  FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE,
+  FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS branch_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL,
+  person_id INTEGER NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(branch_id,person_id),
+  FOREIGN KEY(branch_id) REFERENCES family_branches(id) ON DELETE CASCADE,
+  FOREIGN KEY(person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_family_branches_tree ON family_branches(tree_id,anchor_person_id);
+CREATE INDEX IF NOT EXISTS idx_branch_members_branch ON branch_members(branch_id,person_id);
+
+CREATE TABLE IF NOT EXISTS optional_lineages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, tree_id INTEGER NOT NULL, branch_id INTEGER, anchor_person_id INTEGER NOT NULL, linked_person_id INTEGER NOT NULL, relation_label TEXT NOT NULL DEFAULT 'Keluarga', sibling_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(tree_id,anchor_person_id,linked_person_id), FOREIGN KEY(tree_id) REFERENCES family_trees(id) ON DELETE CASCADE, FOREIGN KEY(anchor_person_id) REFERENCES persons(id) ON DELETE CASCADE, FOREIGN KEY(linked_person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_persons_main_visible ON persons(tree_id,main_visible);
+CREATE INDEX IF NOT EXISTS idx_optional_branch ON optional_lineages(branch_id,sibling_order);

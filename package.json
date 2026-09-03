@@ -1,6 +1,7 @@
 {
-  "name": "jejaknasab-v2",
+  "name": "jejaknasab-v6",
   "private": true,
+  "version": "6.0.0",
   "scripts": {"dev":"wrangler pages dev public","db:init":"wrangler d1 execute jejaknasab-db --remote --file=schema.sql"},
   "devDependencies": {"wrangler":"latest"}
 }

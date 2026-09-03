@@ -1,72 +1,71 @@
-# JejakNasab — V5.17
+# JejakNasab v6.00
 
-Cloudflare Pages + D1, tanpa framework frontend.
+JejakNasab adalah aplikasi silsilah keluarga berbasis Cloudflare Pages + D1 tanpa framework frontend. v6.00 menggunakan baseline v5.21 yang dikirim pengguna dan memisahkan **Pohon Silsilah Utama** dari konteks **Cabang Keluarga** tanpa menggandakan identitas orang yang sama.
 
-## Perbaikan V4
-- Tanggal lahir dan tanggal meninggal pada form anggota memiliki label yang jelas. Tanggal meninggal **opsional**, kosong berarti masih hidup/belum dicatat.
-- Edit anggota memakai form lengkap: nama depan, nama belakang, gender, tanggal lahir, tanggal meninggal, tempat lahir, catatan, dan URL foto. Semua field dapat diubah atau dikosongkan.
-- Pengaturan **Info Publik** per anggota: Nama, Usia, Tanggal lahir, Tempat lahir, Foto.
-- Pohon publik sekarang menampilkan data sesuai privasi dan relasi pasangan, bukan nama saja.
-- Link publik baru memakai token pendek agar URL lebih ringkas. Token lama otomatis dipendekkan saat Owner membuka pengaturan publik.
-- Undangan Family Member tidak lagi meminta ID anggota. Owner memilih anggota dari dropdown.
-- Undangan dapat dibuat dengan email atau nomor WhatsApp, lalu link dapat dikirim melalui WhatsApp, email, atau disalin.
-- Penerima tetap harus mendaftar sebagai Member/Family Member. Setelah login, penerima mengajukan bergabung dan Owner Akun harus **Terima/Tolak** sebelum akses Family Member aktif.
-- Batas satu silsilah per Owner Akun tetap dijaga oleh backend.
+## Perubahan utama v6.00
 
-## Deploy
-1. Upload isi folder ini ke repository GitHub (jangan upload node_modules).
-2. Cloudflare Pages: connect repository, production branch `main`, build command kosong, build output `public`.
-3. D1 binding: `DB` → database JejakNasab.
-4. Variables/Secrets: `SESSION_SECRET`, `OWNER_SETUP_KEY`, `PREMIUM_PRICE`, `ULTIMATE_PRICE`, `PAYMENT_INSTRUCTIONS`.
-5. `/setup-owner` hanya digunakan sekali untuk membuat Owner Web.
+- Nama **Silsilah Opsional** diganti menjadi **Cabang Keluarga**.
+- Anggota Cabang Keluarga dapat dibuat dari konteks cabang secara terpisah dari daftar anggota utama.
+- Anggota utama yang sudah ada dapat dihubungkan ke cabang tanpa membuat duplikat.
+- Cabang mempunyai daftar, tampilan pohon, edit, hubungan, dan pengaturan urutan anak sendiri.
+- Cabang otomatis menyertakan hubungan keluarga yang sudah ada di sekitar titik cabang sesuai cakupan 2 generasi.
+- Jalur samping mencakup saudara, pasangan saudara, dan keturunannya sampai 2 generasi. Jalur samping tidak membuka akses ke orang tua/mertua pasangan saudara.
+- Batas Cabang Keluarga: 2 generasi ke atas + 2 generasi ke bawah dari titik cabang.
+- Premium: 5 Family Member; 3 generasi ke atas + 2 generasi ke bawah; pasangan/saudara + 2 generasi keturunan jalur samping.
+- Ultimate: 20 Family Member; 6 generasi ke atas + 6 generasi ke bawah; pasangan/saudara + 2 generasi keturunan jalur samping.
+- Owner bebas membuat dan mengelola anggota.
+- Dashboard Family Member memakai graph utama yang sama dengan Owner, tetapi hanya pada wilayah yang diizinkan.
+- Dashboard menampilkan daftar Cabang Keluarga secara ringkas; pohon cabang dibuka melalui modal.
+- Search anggota ditempatkan di dalam dropdown **Hubungkan ke anggota yang sudah ada**.
+- Password pendaftaran memiliki konfirmasi dua kolom dan icon mata. Login memiliki icon mata.
+- Data diri mendukung **gelar depan** dan **gelar belakang**, yang ikut tampil pada pohon.
+- Riwayat perubahan tetap hanya tersedia untuk Owner Akun.
+- Pendaftaran Owner Akun tetap berstatus menunggu aktivasi/verifikasi Owner Web; struktur payment request disiapkan agar payment gateway dapat ditambahkan kemudian.
+- Perbaikan defensif terhadap dashboard/endpoint agar Owner Akun dan Family Member tidak jatuh ke error endpoint 404 akibat konteks dashboard.
+
+## Aturan konteks data
+
+**Pohon Utama** adalah sumber hubungan nasab utama.
+
+**Cabang Keluarga** adalah konteks tambahan yang menunjuk pada anggota utama sebagai titik cabang. Identitas orang tetap satu. Jika orang yang sama sudah ada di Pohon Utama, cabang menggunakan `person_id` yang sama. Jika orang baru dibuat khusus untuk cabang, `main_visible=0` sehingga tidak muncul di Pohon Utama sampai suatu saat sengaja dihubungkan ke konteks utama.
 
 ## Database
-`schema.sql` adalah schema lengkap untuk database baru.
-`migration-v3.sql` berisi migration sebelumnya; API V4 juga melakukan upgrade ringan otomatis pada tabel undangan untuk database lama dengan menambahkan kolom yang diperlukan jika belum ada.
 
-**Jangan reset atau hapus database D1 yang sudah berisi data.**
+- `schema.sql` adalah schema lengkap untuk database baru.
+- `migration-v6.sql` menambahkan tabel/index v6 secara aman.
+- API menjalankan upgrade kolom secara idempotent untuk database D1 lama, termasuk `title_prefix`, `title_suffix`, `main_visible`, `optional_lineages.branch_id`, dan struktur Cabang Keluarga.
+- Data `optional_lineages` v5.21 dimigrasikan menjadi `family_branches` pada request pertama setelah v6 aktif; data lama tidak dihapus.
+- **Jangan reset atau hapus database D1 produksi.**
+
+## Deploy
+
+1. Upload/push isi folder ke repository GitHub. Jangan upload `node_modules`.
+2. Cloudflare Pages: production branch `main`, build command kosong, output directory `public`.
+3. D1 binding: `DB` → database JejakNasab.
+4. Variables/Secrets: `SESSION_SECRET`, `OWNER_SETUP_KEY`, `PREMIUM_PRICE`, `ULTIMATE_PRICE`, `PAYMENT_INSTRUCTIONS`.
+5. `/setup-owner` hanya dipakai sekali untuk membuat Owner Web.
 
 ## Paket
-- Premium: 10 Family Member, 3 generasi atas + 3 bawah.
-- Ultimate: 20 Family Member, 6 generasi atas + 6 bawah.
-- Owner akun bebas generasi.
 
-## Akses
-- Owner Web: administrasi pelanggan dan lihat silsilah pelanggan read-only.
-- Owner Akun: kelola penuh satu silsilah miliknya, termasuk publikasi, privasi, undangan, dan persetujuan Family Member.
-- Family Member: akses/edit sesuai posisi dan batas paket.
-- Public: hanya melihat informasi yang diizinkan Owner Akun.
+| Paket | Family Member | Atas | Bawah | Jalur samping |
+|---|---:|---:|---:|---|
+| Owner | bebas | bebas | bebas | bebas |
+| Premium | 5 | 3 | 2 | saudara + pasangan + 2 generasi keturunan |
+| Ultimate | 20 | 6 | 6 | saudara + pasangan + 2 generasi keturunan |
 
-## V5.1
-Perbaikan: nama silsilah manual/otomatis, edit nama silsilah, profil publik interaktif, salin link dengan fallback, garis relasi, dan upgrade Premium ke Ultimate diskon 40%.
+## Cabang Keluarga
 
+- Titik cabang adalah anggota utama.
+- Maksimal 2 generasi ke atas dan 2 generasi ke bawah.
+- Saudara dan pasangan saudara dapat menjadi jalur samping.
+- Keturunan jalur samping maksimal 2 generasi.
+- Orang tua/mertua pasangan saudara tidak dapat dibuat melalui jalur tersebut.
+- Urutan anak cabang disimpan terpisah dari `sibling_order` Pohon Utama.
 
-## V5.4 perubahan terakhir
-- Edit silsilah: nama manual atau default otomatis mengikuti laki-laki teratas.
-- Arah relasi: anggota baru dapat menjadi anak atau orang tua dari anggota yang dipilih.
-- Edit anggota mencakup seluruh data dan tanggal meninggal opsional.
-- Undangan Family Member memakai pilihan nama, email/WhatsApp, lalu persetujuan Owner Akun.
-- Link publik memiliki tombol buka, salin dengan fallback browser HP, konfirmasi private, dan anti-cache.
-- Urutan anak disimpan berdasarkan `sibling_order` dan dipakai juga oleh pohon publik.
-- Daftar anggota dibuat ringkas dalam dropdown dan diurutkan dari generasi teratas; laki-laki lebih dulu pada generasi yang sama.
+## Catatan pembayaran Owner Akun
 
-## V5.17 — Nasab Ayah & Multi-Pasangan
+v6.00 mempertahankan alur yang sudah ada: pendaftaran Owner Akun membuat akun berstatus `pending` dan payment request `pending`. Owner Web dapat melakukan verifikasi/aktivasi. Payment gateway nyata dapat ditambahkan pada tahap berikutnya tanpa mengubah model akun/cabang.
 
-V5.17 memperkuat identitas JejakNasab sebagai aplikasi nasab berbasis garis ayah.
+## Rilis
 
-- Root silsilah utama disimpan pada `family_trees.root_person_id` dan diprioritaskan laki-laki.
-- Dashboard Owner Akun, Family Member, Owner Web read-only, dan publik memakai root yang sama.
-- Hubungan orang tua → anak menentukan generasi; `sibling_order` menentukan urutan saudara.
-- Relasi pasangan menyimpan status aktif/berakhir serta tanggal mulai/berakhir.
-- Seorang laki-laki dapat memiliki beberapa istri; seorang perempuan hanya memiliki satu suami aktif.
-- Jika suami sebelumnya tercatat wafat, hubungan lama dapat diakhiri otomatis ketika pasangan berikutnya dicatat.
-- Riwayat pasangan tidak dihapus.
-- Owner Akun dapat mengakhiri hubungan pasangan dari menu **Pasangan & Riwayat**.
-- Garis pasangan digambar di antara kotak; garis keturunan turun dari tengah unit pasangan ke garis anak lalu ke setiap anak.
-
-### Migrasi V5.17
-
-Untuk database D1 yang sudah dipakai, jalankan `migration-v5.17.sql` satu kali. Jangan menjalankan `schema.sql` untuk mereset database produksi dan jangan menghapus database lama.
-
-## V5.21
-Perbaikan konsistensi graph/root pada dashboard Family Member agar pohon silsilah dan daftar Silsilah Opsional mengikuti data yang sama dengan Owner dan link publik.
+Lihat `V6.00_RELEASE.md` untuk ringkasan perubahan dan migrasi.
