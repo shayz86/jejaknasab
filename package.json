@@ -1,5 +1,5 @@
 {
-  "name": "jejaknasab-v6.02",
+  "name": "jejaknasab-v6",
   "private": true,
   "scripts": {
     "dev": "wrangler pages dev public",
