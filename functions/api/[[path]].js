@@ -133,7 +133,22 @@ async function publicBranchGraph(env,bid,anchorId,treeId){
    const siblingsOf=x=>{const out=new Set();for(const par of parentOf(x))for(const sib of childOf(par))if(Number(sib)!==Number(x))out.add(Number(sib));return [...out]};
    const walkDown=(start,depth)=>{let cur=[Number(start)];for(let d=0;d<depth;d++){const next=[];for(const x of cur)for(const y of childOf(x)){add(y);next.push(y)}cur=next}return cur};
    // Ancestors of the anchor: up to 2 generations.
-   let cur=[aid];for(let d=0;d<2;d++){const next=[];for(const x of cur)for(const y of parentOf(x)){add(y);next.push(y)}cur=next}
+   // Include the spouse(s) of each selected ancestor so the public branch
+   // preserves the same immediate family structure shown in the main tree
+   // (e.g. Nur Rahmalia -> Romli + Fatimah). Do not traverse upward from
+   // those spouses, which would expose the in-law/merua tree.
+   let cur=[aid];
+   for(let d=0;d<2;d++){
+     const next=[];
+     for(const x of cur){
+       for(const y of parentOf(x)){
+         add(y);
+         for(const sp of spouseOf(y))add(sp);
+         next.push(y);
+       }
+     }
+     cur=next;
+   }
    // Anchor spouse(s) and children.
    for(const sp of spouseOf(aid)){add(sp);walkDown(sp,2)}
    walkDown(aid,2);
