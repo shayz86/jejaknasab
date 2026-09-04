@@ -1,3 +1,7 @@
+## JejakNasab V6.02
+
+Perbaikan publik, scope Family Member, zoom, dan Cabang Keluarga.
+
 # JejakNasab — V6.00
 
 JejakNasab is a Cloudflare Pages + D1 family genealogy application without a frontend framework.
