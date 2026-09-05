@@ -1,16 +1,19 @@
-# JejakNasab V6.12 — Naming, Public Sync & Branch Creation Fix
+# JejakNasab V6.12 — Terminologi, Nama Silsilah, Sinkronisasi Publik & Cabang
 
-Perubahan terbatas pada permintaan perbaikan terbaru:
+## Perubahan
+- Mengubah label pengguna **Owner Akun** menjadi **Pemilik Akun** pada antarmuka.
+- Mengubah label **Family Member** menjadi **Pengelola Nasab** pada antarmuka.
+- Menghapus pilihan **Generasi teratas** dari dialog Edit Silsilah.
+- Nama Silsilah Utama sekarang otomatis mengikuti laki-laki teratas pada silsilah utama apabila kolom nama dikosongkan.
+- Nama otomatis hanya mengambil anggota `main_visible=1`, sehingga anggota yang hanya berada di Cabang Keluarga tidak dapat menjadi sumber nama Silsilah Utama.
+- Saat gelar/nama anggota utama diubah, nama Silsilah yang menggunakan mode otomatis ikut diperbarui.
+- Link publik sekarang menggunakan nama lengkap anggota termasuk gelar depan/belakang.
+- Memperbaiki pembuatan Cabang Keluarga agar tidak gagal HTTP 500 ketika terdapat record cabang lama/inaktif dengan anchor yang sama.
+- Saat mengaktifkan kembali record cabang lama, anggota dan relasi cabang dibangun ulang dari hubungan langsung di Silsilah Utama.
+- Cabang baru mencakup konteks keluarga langsung: pasangan, anak, orang tua, saudara, pasangan saudara, serta anak saudara sesuai batas cabang.
+- Status Cabang Keluarga pada link publik tetap mengikuti data cabang yang tersimpan.
 
-- Terminologi UI `Owner Akun` menjadi `Pemilik Akun`.
-- Terminologi UI `Family Member` menjadi `Pengelola Nasab`.
-- Nama Silsilah Utama: kolom pemilihan generasi teratas dihapus dari UI.
-- Jika nama silsilah dikosongkan, nama otomatis mengikuti laki-laki teratas pada Silsilah Utama.
-- Anggota yang hanya berada di Cabang Keluarga (`main_visible=0`) tidak digunakan sebagai nama Silsilah Utama.
-- Perubahan nama/gelar anggota memicu refresh nama otomatis Silsilah Utama.
-- Link publik menggunakan nama lengkap yang mencakup gelar depan/belakang.
-- Pembuatan Cabang Keluarga dibuat lebih tahan terhadap data cabang lama/inaktif dan mengaktifkan kembali record yang sesuai bila ada.
-- Cabang baru tetap menyerap relasi keluarga yang sudah tersimpan di Silsilah Utama, termasuk orang tua, pasangan, dan anak yang langsung berhubungan dengan titik cabang.
-- Public Branch tetap menyinkronkan anggota/relasi langsung dari Silsilah Utama sehingga penambahan relasi setelah cabang dibuat dapat terlihat di link publik.
-
-Tidak mengubah fitur lain di luar perbaikan di atas.
+## Kompatibilitas
+- Tidak mengubah nilai role internal (`owner` / `member`).
+- Endpoint pemilihan root lama tetap tersedia untuk kompatibilitas data, tetapi tidak lagi ditampilkan pada UI.
+- Perubahan hanya menyentuh terminologi UI, nama otomatis, sinkronisasi nama publik, dan logika Cabang Keluarga.
