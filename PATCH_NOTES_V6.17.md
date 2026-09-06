@@ -1,30 +1,16 @@
-# JejakNasab V6.17 — Algoritma Cabang Keluarga
+# JejakNasab V6.17 — Perbaikan Algoritma Cabang Keluarga
 
 ## Perubahan utama
+1. Cabang Keluarga otomatis disinkronkan ketika ditemukan hubungan orang tua di luar Silsilah Utama dengan anggota yang berada di Silsilah Utama.
+2. Sinkronisasi memeriksa hubungan parent pada `relationships`, `branch_relationships`, dan legacy `optional_lineages`.
+3. Anggota anak/main-visible menjadi anchor Cabang; orang tua `main_visible=0` menjadi anggota khusus Cabang.
+4. Daftar Cabang pada API owner/member dan daftar Cabang pada API publik melakukan sinkronisasi sebelum mengembalikan hasil, sehingga tombol/link Cabang dapat muncul tanpa pembuatan manual terpisah.
+5. Dashboard Pengelola Nasab yang mewakili anggota yang memiliki Cabang Keluarga kini menampilkan pohon Cabang Keluarga tersebut menggunakan `branchGraph` yang sama dengan tampilan Owner dan Link Publik.
+6. Tampilan Cabang pada dashboard Pengelola Nasab memakai root dari konteks Cabang, bukan root hasil penyaringan Silsilah Utama.
+7. Fitur pengelolaan anggota Cabang dari V6.17 sebelumnya tetap dipertahankan: Edit/Hapus anggota yang hanya dibuat di Cabang.
 
-V6.17 memperbaiki dasar pembentukan Cabang Keluarga:
-
-- Seorang anggota Silsilah Utama dapat menjadi titik awal Cabang Keluarga apabila orang tuanya berada di luar Silsilah Utama.
-- Ketika orang tua tersebut dibuat sebagai anggota khusus Cabang (`main_visible=0`) dan dihubungkan sebagai orang tua dari anggota Silsilah Utama, Cabang Keluarga untuk anak tersebut dibuat otomatis.
-- Anchor Cabang tetap anak/anggota Silsilah Utama, bukan orang tua yang berada di luar Silsilah Utama.
-- Hubungan orang tua khusus Cabang disimpan sebagai relasi `parent` di Cabang, sehingga tampil di atas anchor dan tetap dapat dikelola.
-- Konteks Cabang tetap mengambil pasangan, anak, orang tua, saudara, pasangan saudara, dan keturunan sesuai aturan Cabang yang sudah ada.
-- Fitur pengelolaan anggota Cabang dari V6.17 sebelumnya tetap dipertahankan: anggota khusus Cabang dapat diedit/dihapus tanpa menghapus anggota yang berasal dari Silsilah Utama.
-
-## Contoh
-
-Jika Silsilah Utama memiliki `Chodidjah`, lalu dibuat `Ayah Chodidjah` hanya di Cabang dan dihubungkan:
-
-`Ayah Chodidjah -> Chodidjah`
-
-maka sistem otomatis membuat:
-
-`Cabang Keluarga Chodidjah`
-
-dengan Chodidjah sebagai anchor dan Ayah Chodidjah sebagai orang tua Cabang.
-
-## Bukan perubahan
-
-- Tidak mengubah konsep nasab utama.
-- Tidak mengubah data anggota Silsilah Utama menjadi anggota Cabang.
-- Tidak membuat salinan pasangan/anak yang sudah berada di Silsilah Utama.
+## Tidak diubah
+- Struktur utama Silsilah Utama.
+- Hak akses Owner/Pengelola Nasab.
+- Fitur publikasi dan privacy.
+- Algoritma tampilan Cabang Owner/Public yang sudah benar.
