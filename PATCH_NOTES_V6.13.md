@@ -1,16 +1,16 @@
-# JejakNasab V6.13 — Nama Otomatis Utama & Dashboard Cabang/Riwayat
+# JejakNasab V6.13 — Root Otomatis, Accordion Cabang & Riwayat Pengeditan
 
 ## Perubahan
-- Memperbaiki nama silsilah otomatis: saat **Nama silsilah** dikosongkan, sistem memprioritaskan `root_person_id` dari **Silsilah Utama** yang laki-laki dan `main_visible=1`.
-- Jika root tersimpan tidak valid, sistem mencari laki-laki teratas dari Silsilah Utama (`main_visible=1`) dan bukan anggota yang hanya berada di Cabang Keluarga.
-- Menambahkan accordion **🌿 Daftar Cabang Keluarga** pada Dashboard Pemilik Akun.
-- Daftar Cabang Keluarga menampilkan titik cabang, jumlah anggota, serta tombol Lihat/Edit.
-- Menambahkan accordion **🕘 Riwayat Pengeditan** tepat di bawah Daftar Cabang Keluarga.
-- Riwayat menggunakan `audit_logs` yang sudah ada dan menampilkan pelaku, waktu, jenis perubahan, serta detail bila tersedia.
-- Menambahkan pencatatan audit saat nama/deskripsi silsilah diubah dan saat anggota utama dihapus.
-- Saat anggota utama dihapus, nama otomatis dan root silsilah dihitung ulang.
+- Memperbaiki nama Silsilah Utama otomatis agar selalu mengambil laki-laki teratas dari Silsilah Utama (`main_visible=1`), bukan anggota Cabang Keluarga.
+- Root lama yang menunjuk anggota Cabang Keluarga tidak lagi dipertahankan sebagai root utama; sistem akan memilih root laki-laki yang valid dari Silsilah Utama.
+- Endpoint root lama tetap dipertahankan untuk kompatibilitas, tetapi hanya menerima anggota Silsilah Utama.
+- Menambahkan menu accordion **Daftar Cabang Keluarga** di bawah Pohon Silsilah Utama pada tampilan pengelolaan Silsilah.
+- Menambahkan menu accordion **Riwayat Pengeditan** tepat di bawah Daftar Cabang Keluarga.
+- Riwayat mengambil data dari `audit_logs` yang sudah digunakan aplikasi dan menampilkan waktu, pengguna, jenis perubahan, serta detail perubahan bila tersedia.
+- Menambah pencatatan perubahan nama/deskripsi silsilah, perubahan anggota, hubungan, privasi, dan pengurutan anak.
+- Daftar Cabang Keluarga menggunakan nama lengkap titik cabang termasuk gelar.
 
 ## Kompatibilitas
-- Tidak mengubah struktur role internal.
-- Tidak mengubah batas paket, aturan Cabang Keluarga, privasi, undangan, klaim, maupun fitur publik lainnya.
-- Tidak membutuhkan migration database baru karena tabel `audit_logs` sudah tersedia pada V6.12.
+- Tidak mengubah role internal `owner` / `member`.
+- Tidak mengubah fitur publik, login, undangan, klaim, pengelolaan pasangan, atau struktur Cabang Keluarga selain perbaikan root otomatis dan tampilan menu yang diminta.
+- Tidak memerlukan migrasi database baru karena tabel `audit_logs` dan struktur Cabang Keluarga sudah tersedia pada V6.12.
