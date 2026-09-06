@@ -113,7 +113,40 @@ function branchGraphRows(persons,rels){const byId=new Map(persons.map(p=>[Number
 function branchDistances(anchor,g){const d=new Map([[Number(anchor),{gen:0,side:false,sideDepth:0}]]),q=[Number(anchor)];while(q.length){const x=q.shift(),cur=d.get(x);for(const y of g.parents.get(x)||[]){if(cur.side)continue;const nd={gen:cur.gen-1,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.children.get(x)||[]){const nd=cur.side?{gen:cur.gen+1,side:true,sideDepth:cur.sideDepth+1}:{gen:cur.gen+1,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.spouses.get(x)||[]){const nd=cur.side?{gen:cur.gen,side:true,sideDepth:cur.sideDepth}:{gen:cur.gen,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.siblings.get(x)||[]){const nd={gen:cur.gen,side:true,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}}return d}
 function branchAllowed(anchor,g,genUp=2,genDown=2,target){const d=branchDistances(anchor,g).get(Number(target));if(!d)return false;if(d.side)return d.gen<=genDown&&d.gen>=0&&d.sideDepth<=2;return d.gen>=-genUp&&d.gen<=genDown}
 async function branchOf(env,id){return env.DB.prepare('SELECT * FROM family_branches WHERE id=? AND active=1').bind(id).first()}
-async function branchGraph(env,bid){const ps=(await env.DB.prepare('SELECT p.*,bm.source_type,bm.context_role,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[];const rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[];return{persons:ps,relationships:rs}}
+async function branchGraph(env,bid){
+ let br=await env.DB.prepare('SELECT * FROM family_branches WHERE id=? AND active=1').bind(bid).first();
+ if(!br)return{persons:[],relationships:[]};
+ let ps=(await env.DB.prepare('SELECT p.*,bm.source_type,bm.context_role,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[];
+ let rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[];
+ const ids=new Set(ps.map(p=>Number(p.id)));ids.add(Number(br.anchor_person_id));
+ // A branch represents the family around its anchor. Older branches may only
+ // contain the anchor in branch_members, so reconstruct the connected family
+ // from the current main-tree relationships without exposing unrelated lines.
+ try{
+   const mg=await graph(env,br.tree_id),aid=Number(br.anchor_person_id);
+   const add=id=>{if(id!=null&&Number(id))ids.add(Number(id))};
+   const parentOf=x=>(mg.pa.get(Number(x))||[]).map(Number);
+   const childOf=x=>(mg.ch.get(Number(x))||[]).map(Number);
+   const spouseOf=x=>(mg.sp.get(Number(x))||[]).map(Number);
+   const siblingsOf=x=>{const out=new Set();for(const par of parentOf(x))for(const sib of childOf(par))if(Number(sib)!==Number(x))out.add(Number(sib));return [...out]};
+   const walkDown=(start,depth)=>{let cur=[Number(start)];for(let d=0;d<depth;d++){const next=[];for(const x of cur)for(const y of childOf(x)){add(y);next.push(y)}cur=next}return cur};
+   let cur=[aid];
+   for(let d=0;d<2;d++){
+     const next=[];
+     for(const x of cur)for(const y of parentOf(x)){add(y);for(const sp of spouseOf(y))add(sp);next.push(y)}
+     cur=next;
+   }
+   for(const sp of spouseOf(aid)){add(sp);walkDown(sp,2)}
+   walkDown(aid,2);
+   for(const sib of siblingsOf(aid)){add(sib);for(const sp of spouseOf(sib))add(sp);walkDown(sib,2)}
+   const selectedMain=(mg.rs||[]).filter(r=>ids.has(Number(r.from_person_id))&&ids.has(Number(r.to_person_id))&&['parent','spouse'].includes(r.type));
+   const existingKeys=new Set(rs.map(r=>`${r.from_person_id}:${r.to_person_id}:${r.type}`));
+   for(const r of selectedMain){const k=`${r.from_person_id}:${r.to_person_id}:${r.type}`;if(!existingKeys.has(k)){rs.push({...r,id:-Math.abs(Number(r.id||0))});existingKeys.add(k)}}
+ }catch{}
+ if(ids.size>ps.length){const more=[...ids].filter(id=>!ps.some(p=>Number(p.id)===id));if(more.length){try{const q=`SELECT * FROM persons WHERE id IN (${more.map(()=>'?').join(',')})`;const extra=(await env.DB.prepare(q).bind(...more).all()).results||[];ps.push(...extra)}catch{}}}
+ ps.sort((a,b)=>Number(a.branch_sibling_order??a.sibling_order??0)-Number(b.branch_sibling_order??b.sibling_order??0)||Number(a.sibling_order||0)-Number(b.sibling_order||0)||Number(a.id)-Number(b.id));
+ return{persons:ps,relationships:rs}
+}
 async function publicBranchGraph(env,bid,anchorId,treeId){
  let ps=[];
  try{ps=(await env.DB.prepare('SELECT p.*,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[]}
@@ -304,7 +337,7 @@ export async function onRequest({request,env}){
    let rows=[];
    if(u.role==='owner'||t.created_by===u.id){rows=(await env.DB.prepare(`SELECT b.*,p.first_name anchor_first_name,p.last_name anchor_last_name,p.title_prefix anchor_title_prefix,p.title_suffix anchor_title_suffix,COUNT(bm.id) member_count FROM family_branches b JOIN persons p ON p.id=b.anchor_person_id LEFT JOIN branch_members bm ON bm.branch_id=b.id WHERE b.tree_id=? AND b.active=1 GROUP BY b.id ORDER BY b.created_at DESC`).bind(tid).all()).results||[]}
    else {const sc=await scoped(env,u,t);if(!sc)return B('Tidak memiliki akses.',403);rows=(await env.DB.prepare(`SELECT b.*,p.first_name anchor_first_name,p.last_name anchor_last_name,p.title_prefix anchor_title_prefix,p.title_suffix anchor_title_suffix,COUNT(bm.id) member_count FROM family_branches b JOIN persons p ON p.id=b.anchor_person_id LEFT JOIN branch_members bm ON bm.branch_id=b.id WHERE b.tree_id=? AND b.active=1 AND b.anchor_person_id IN (${[...sc.ids].map(()=>'?').join(',')||'0'}) GROUP BY b.id ORDER BY b.created_at DESC`).bind(tid,...[...sc.ids].map(Number)).all()).results||[]}
-   return J({branches:rows.map(x=>({...x,anchor_name:fullname({first_name:x.anchor_first_name,last_name:x.anchor_last_name,title_prefix:x.anchor_title_prefix,title_suffix:x.anchor_title_suffix})}))});
+   const out=[];for(const x of rows){let n=Number(x.member_count||0);try{const bg=await branchGraph(env,Number(x.id));n=bg.persons.length}catch{}out.push({...x,member_count:n,anchor_name:fullname({first_name:x.anchor_first_name,last_name:x.anchor_last_name,title_prefix:x.anchor_title_prefix,title_suffix:x.anchor_title_suffix})})}return J({branches:out});
   }
   if(m==='POST'){
    if(u.role!=='member'||t.created_by!==u.id)return B('Hanya Pemilik Akun yang dapat membuat Cabang Keluarga.',403);
