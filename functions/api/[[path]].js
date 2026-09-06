@@ -114,89 +114,86 @@ function branchGraphRows(persons,rels){const byId=new Map(persons.map(p=>[Number
 function branchDistances(anchor,g){const d=new Map([[Number(anchor),{gen:0,side:false,sideDepth:0}]]),q=[Number(anchor)];while(q.length){const x=q.shift(),cur=d.get(x);for(const y of g.parents.get(x)||[]){if(cur.side)continue;const nd={gen:cur.gen-1,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.children.get(x)||[]){const nd=cur.side?{gen:cur.gen+1,side:true,sideDepth:cur.sideDepth+1}:{gen:cur.gen+1,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.spouses.get(x)||[]){const nd=cur.side?{gen:cur.gen,side:true,sideDepth:cur.sideDepth}:{gen:cur.gen,side:false,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}for(const y of g.siblings.get(x)||[]){const nd={gen:cur.gen,side:true,sideDepth:0};if(!d.has(y)){d.set(y,nd);q.push(y)}}}return d}
 function branchAllowed(anchor,g,genUp=2,genDown=2,target){const d=branchDistances(anchor,g).get(Number(target));if(!d)return false;if(d.side)return d.gen<=genDown&&d.gen>=0&&d.sideDepth<=2;return d.gen>=-genUp&&d.gen<=genDown}
 async function branchOf(env,id){let b=null;try{b=await env.DB.prepare('SELECT * FROM family_branches WHERE id=?').bind(id).first()}catch{}if(!b)return null;if(b.active!==undefined&&Number(b.active)===0)return null;return b}
-async function branchGraph(env,bid){
- let br=null;try{br=await env.DB.prepare('SELECT * FROM family_branches WHERE id=?').bind(bid).first()}catch{}if(br&&br.active!==undefined&&Number(br.active)===0)br=null;
- if(!br)return{persons:[],relationships:[]};
- let ps=(await env.DB.prepare('SELECT p.*,bm.source_type,bm.context_role,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[];
- let rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[];
- const ids=new Set(ps.map(p=>Number(p.id)));ids.add(Number(br.anchor_person_id));
- // A branch represents the family around its anchor. Older branches may only
- // contain the anchor in branch_members, so reconstruct the connected family
- // from the current main-tree relationships without exposing unrelated lines.
+async function expandBranchContext(env,treeId,anchorId,persons,relationships){
+ const ids=new Set((persons||[]).map(p=>Number(p.id)).filter(Boolean));
+ for(const r of (relationships||[])){ids.add(Number(r.from_person_id));ids.add(Number(r.to_person_id))}
+ const aid=Number(anchorId||0);if(aid)ids.add(aid);
  try{
-   const mg=await graph(env,br.tree_id),aid=Number(br.anchor_person_id);
+   const mg=await graph(env,treeId);
    const add=id=>{if(id!=null&&Number(id))ids.add(Number(id))};
    const parentOf=x=>(mg.pa.get(Number(x))||[]).map(Number);
    const childOf=x=>(mg.ch.get(Number(x))||[]).map(Number);
    const spouseOf=x=>(mg.sp.get(Number(x))||[]).map(Number);
    const siblingsOf=x=>{const out=new Set();for(const par of parentOf(x))for(const sib of childOf(par))if(Number(sib)!==Number(x))out.add(Number(sib));return [...out]};
    const walkDown=(start,depth)=>{let cur=[Number(start)];for(let d=0;d<depth;d++){const next=[];for(const x of cur)for(const y of childOf(x)){add(y);next.push(y)}cur=next}return cur};
-   let cur=[aid];
-   for(let d=0;d<2;d++){
-     const next=[];
-     for(const x of cur)for(const y of parentOf(x)){add(y);for(const sp of spouseOf(y))add(sp);next.push(y)}
-     cur=next;
-   }
+
+   // 1) Anchor + pasangan + anak-anak anchor.
    for(const sp of spouseOf(aid)){add(sp);walkDown(sp,2)}
    walkDown(aid,2);
-   for(const sib of siblingsOf(aid)){add(sib);for(const sp of spouseOf(sib))add(sp);walkDown(sib,2)}
-   const selectedMain=(mg.rs||[]).filter(r=>ids.has(Number(r.from_person_id))&&ids.has(Number(r.to_person_id))&&['parent','spouse'].includes(r.type));
-   const existingKeys=new Set(rs.map(r=>`${r.from_person_id}:${r.to_person_id}:${r.type}`));
-   for(const r of selectedMain){const k=`${r.from_person_id}:${r.to_person_id}:${r.type}`;if(!existingKeys.has(k)){rs.push({...r,id:-Math.abs(Number(r.id||0))});existingKeys.add(k)}}
- }catch{}
- if(ids.size>ps.length){const more=[...ids].filter(id=>!ps.some(p=>Number(p.id)===id));if(more.length){try{const q=`SELECT * FROM persons WHERE id IN (${more.map(()=>'?').join(',')})`;const extra=(await env.DB.prepare(q).bind(...more).all()).results||[];ps.push(...extra)}catch{}}}
- ps.sort((a,b)=>Number(a.branch_sibling_order??a.sibling_order??0)-Number(b.branch_sibling_order??b.sibling_order??0)||Number(a.sibling_order||0)-Number(b.sibling_order||0)||Number(a.id)-Number(b.id));
- return{persons:ps,relationships:rs}
-}
-async function publicBranchGraph(env,bid,anchorId,treeId){
- let ps=[];
- try{ps=(await env.DB.prepare('SELECT p.*,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[]}
- catch{try{ps=(await env.DB.prepare('SELECT p.* FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY p.sibling_order,p.id').bind(bid).all()).results||[]}catch{}}
- let rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[];
- const ids=new Set(ps.map(p=>Number(p.id)));
- for(const r of rs){ids.add(Number(r.from_person_id));ids.add(Number(r.to_person_id))}
- if(anchorId)ids.add(Number(anchorId));
- // Public branch must reflect the family already connected to the branch point.
- // If an older branch record contains only its anchor (or incomplete members),
- // supplement it from the main tree without exposing the rest of the tree.
- try{
-   const mg=await graph(env,treeId), aid=Number(anchorId||0);
-   const add=id=>{if(id!=null&&Number(id))ids.add(Number(id))};
-   const parentOf=x=>(mg.pa.get(Number(x))||[]).map(Number);
-   const childOf=x=>(mg.ch.get(Number(x))||[]).map(Number);
-   const spouseOf=x=>(mg.sp.get(Number(x))||[]).map(Number);
-   const siblingsOf=x=>{const out=new Set();for(const par of parentOf(x))for(const sib of childOf(par))if(Number(sib)!==Number(x))out.add(Number(sib));return [...out]};
-   const walkDown=(start,depth)=>{let cur=[Number(start)];for(let d=0;d<depth;d++){const next=[];for(const x of cur)for(const y of childOf(x)){add(y);next.push(y)}cur=next}return cur};
-   // Ancestors of the anchor: up to 2 generations.
-   // Include the spouse(s) of each selected ancestor so the public branch
-   // preserves the same immediate family structure shown in the main tree
-   // (e.g. Nur Rahmalia -> Romli + Fatimah). Do not traverse upward from
-   // those spouses, which would expose the in-law/merua tree.
+
+   // 2) Orang tua anchor sampai 2 generasi ke atas.
+   //    Pasangan dari setiap orang tua ikut, tetapi kita tidak merambat
+   //    ke atas melalui pasangan tersebut.
    let cur=[aid];
    for(let d=0;d<2;d++){
      const next=[];
      for(const x of cur){
-       for(const y of parentOf(x)){
-         add(y);
-         for(const sp of spouseOf(y))add(sp);
-         next.push(y);
+       for(const par of parentOf(x)){
+         add(par);
+         for(const sp of spouseOf(par))add(sp);
+         next.push(par);
        }
      }
      cur=next;
    }
-   // Anchor spouse(s) and children.
-   for(const sp of spouseOf(aid)){add(sp);walkDown(sp,2)}
-   walkDown(aid,2);
-   // Siblings and their spouses/descendants form the direct side of this branch.
-   for(const sib of siblingsOf(aid)){add(sib);for(const sp of spouseOf(sib))add(sp);walkDown(sib,2)}
-   // Keep relationships from the main tree only when both endpoints are selected.
-   const selectedMain=(mg.rs||[]).filter(r=>ids.has(Number(r.from_person_id))&&ids.has(Number(r.to_person_id))&&['parent','spouse'].includes(r.type));
-   const existingKeys=new Set(rs.map(r=>`${r.from_person_id}:${r.to_person_id}:${r.type}`));
-   for(const r of selectedMain){const k=`${r.from_person_id}:${r.to_person_id}:${r.type}`;if(!existingKeys.has(k)){rs.push({...r,id:-Math.abs(Number(r.id||0))});existingKeys.add(k)}}
+
+   // 3) Saudara kandung anchor + pasangan + keturunannya.
+   for(const sib of siblingsOf(aid)){
+     add(sib);
+     for(const sp of spouseOf(sib))add(sp);
+     walkDown(sib,2);
+   }
+
+   // 4) Pertahankan semua relasi khusus yang sudah dibuat di Cabang,
+   //    lalu tambahkan relasi dari Silsilah Utama hanya jika kedua ujungnya
+   //    memang sudah termasuk dalam scope cabang.
+   const existingKeys=new Set((relationships||[]).map(r=>`${r.from_person_id}:${r.to_person_id}:${r.type}`));
+   for(const r of (mg.rs||[])){
+     if(!ids.has(Number(r.from_person_id))||!ids.has(Number(r.to_person_id)))continue;
+     if(!['parent','spouse'].includes(r.type))continue;
+     const k=`${r.from_person_id}:${r.to_person_id}:${r.type}`;
+     if(!existingKeys.has(k)){relationships.push({...r,id:-Math.abs(Number(r.id||0))});existingKeys.add(k)}
+   }
  }catch{}
+ return ids;
+}
+async function loadBranchPersons(env,bid,legacySafe=true){
+ let ps=[];
+ try{
+   ps=(await env.DB.prepare('SELECT p.*,bm.source_type,bm.context_role,bm.sibling_order branch_sibling_order FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY bm.sibling_order,p.sibling_order,p.id').bind(bid).all()).results||[];
+ }catch{
+   try{ps=(await env.DB.prepare('SELECT p.* FROM branch_members bm JOIN persons p ON p.id=bm.person_id WHERE bm.branch_id=? ORDER BY p.sibling_order,p.id').bind(bid).all()).results||[]}catch{}
+ }
+ return ps;
+}
+async function branchGraph(env,bid){
+ let br=null;try{br=await env.DB.prepare('SELECT * FROM family_branches WHERE id=?').bind(bid).first()}catch{}
+ if(br&&br.active!==undefined&&Number(br.active)===0)br=null;
+ if(!br)return{persons:[],relationships:[]};
+ let ps=await loadBranchPersons(env,bid),rs=[];
+ try{rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[]}catch{}
+ const ids=await expandBranchContext(env,br.tree_id,br.anchor_person_id,ps,rs);
  if(ids.size>ps.length){const more=[...ids].filter(id=>!ps.some(p=>Number(p.id)===id));if(more.length){try{const q=`SELECT * FROM persons WHERE id IN (${more.map(()=>'?').join(',')})`;const extra=(await env.DB.prepare(q).bind(...more).all()).results||[];ps.push(...extra)}catch{}}}
  ps.sort((a,b)=>Number(a.branch_sibling_order??a.sibling_order??0)-Number(b.branch_sibling_order??b.sibling_order??0)||Number(a.sibling_order||0)-Number(b.sibling_order||0)||Number(a.id)-Number(b.id));
- return{persons:ps,relationships:rs}
+ return{persons:ps,relationships:rs};
+}
+async function publicBranchGraph(env,bid,anchorId,treeId){
+ let ps=await loadBranchPersons(env,bid);
+ let rs=[];try{rs=(await env.DB.prepare('SELECT * FROM branch_relationships WHERE branch_id=? ORDER BY id').bind(bid).all()).results||[]}catch{}
+ const ids=await expandBranchContext(env,treeId,anchorId,ps,rs);
+ if(ids.size>ps.length){const more=[...ids].filter(id=>!ps.some(p=>Number(p.id)===id));if(more.length){try{const q=`SELECT * FROM persons WHERE id IN (${more.map(()=>'?').join(',')})`;const extra=(await env.DB.prepare(q).bind(...more).all()).results||[];ps.push(...extra)}catch{}}}
+ ps.sort((a,b)=>Number(a.branch_sibling_order??a.sibling_order??0)-Number(b.branch_sibling_order??b.sibling_order??0)||Number(a.sibling_order||0)-Number(b.sibling_order||0)||Number(a.id)-Number(b.id));
+ return{persons:ps,relationships:rs};
 }
 async function branchAccess(env,u,t,b){if(!b||b.tree_id!==t.id)return null;if(u.role==='owner')return{ownerWeb:true,editable:false};if(u.role!=='member')return null;if(t.created_by===u.id)return{owner:true,editable:true};const sc=await scoped(env,u,t);if(!sc)return null;return sc.ids.has(Number(b.anchor_person_id))?{owner:false,editable:true,sc}:null}
 
@@ -208,7 +205,7 @@ export async function onRequest({request,env}){
   if(!env.OWNER_SETUP_KEY)return B('OWNER_SETUP_KEY belum dikonfigurasi di Cloudflare.',500);const b=await body(request);if(b.setupKey!==env.OWNER_SETUP_KEY)return B('Setup key salah.',403);const c=await env.DB.prepare("SELECT COUNT(*) n FROM users WHERE role='owner'").first();if(Number(c?.n))return B('Owner sudah dibuat.',409);const n=clean(b.name,120),e=mail(b.email),pw=String(b.password||'');if(n.length<2||!e.includes('@')||pw.length<8)return B('Data owner tidak valid. Password minimal 8 karakter.');const p=await phash(pw);await env.DB.prepare("INSERT INTO users(name,email,password_hash,password_salt,role,status) VALUES(?,?,?,?,'owner','active')").bind(n,e,p.hash,p.salt).run();return J({ok:true,message:'Owner berhasil dibuat. Silakan login.'})
  }
  if(path==='/config'&&m==='GET')return J({premium:{price:price('premium',env),familyMembers:5,generation:3,generationDown:2,sideGenerationDown:2},ultimate:{price:price('ultimate',env),familyMembers:20,generation:6,generationDown:6,sideGenerationDown:2,upgradePrice:Math.round(price('ultimate',env)*0.6)},upgradeDiscount:40,paymentInstructions:env.PAYMENT_INSTRUCTIONS||'Hubungi owner untuk instruksi pembayaran.'});
- if(path==='/health'&&m==='GET'){try{const c=await env.DB.prepare('SELECT COUNT(*) n FROM family_trees').first();const p=await env.DB.prepare('SELECT COUNT(*) n FROM persons').first();const s=await env.DB.prepare('SELECT COUNT(*) n FROM share_tokens WHERE is_public=1').first();return J({ok:true,version:'6.15',db:true,trees:Number(c?.n||0),persons:Number(p?.n||0),publicTrees:Number(s?.n||0),timestamp:new Date().toISOString()});}catch(e){return B('D1 health check gagal.',500)}}
+ if(path==='/health'&&m==='GET'){try{const c=await env.DB.prepare('SELECT COUNT(*) n FROM family_trees').first();const p=await env.DB.prepare('SELECT COUNT(*) n FROM persons').first();const s=await env.DB.prepare('SELECT COUNT(*) n FROM share_tokens WHERE is_public=1').first();return J({ok:true,version:'6.16',db:true,trees:Number(c?.n||0),persons:Number(p?.n||0),publicTrees:Number(s?.n||0),timestamp:new Date().toISOString()});}catch(e){return B('D1 health check gagal.',500)}}
  const pub=path.match(/^\/public\/trees\/([^/]+)$/);if(pub&&m==='GET'){
   let publicToken='';try{publicToken=decodeURIComponent(pub[1])}catch{return B('Token link publik tidak valid.',400)}
   try{const st=await env.DB.prepare('SELECT * FROM share_tokens WHERE token=? AND is_public=1').bind(publicToken).first();if(!st)return B('Silsilah publik tidak ditemukan.',404);const t=await tree(env,st.tree_id);if(!t)return B('Silsilah tidak ditemukan.',404);await ensureTreeRoot(env,t.id);const nt=await tree(env,t.id);const g=await graph(env,t.id);const pr=(await env.DB.prepare('SELECT * FROM person_privacy WHERE person_id IN (SELECT id FROM persons WHERE tree_id=?)').bind(t.id).all()).results||[],pp=new Map(pr.map(x=>[x.person_id,x]));const activeRows=(await env.DB.prepare("SELECT person_id FROM tree_members WHERE tree_id=? AND status='active'").bind(t.id).all()).results||[],pendingRows=(await env.DB.prepare("SELECT person_id FROM claim_requests WHERE tree_id=? AND status='pending'").bind(t.id).all()).results||[],activeSet=new Set(activeRows.map(x=>Number(x.person_id))),pendingSet=new Set(pendingRows.map(x=>Number(x.person_id)));const mainPersons=g.ps.filter(p=>Number(p.main_visible??1)===1);const persons=mainPersons.map(p=>{const v=pp.get(p.id)||{show_name:1,show_age:1,show_birth_date:0,show_birth_place:0,show_photo:0};const x={id:p.id,name:v.show_name?fullname(p):'Anggota keluarga',gender:p.gender,isDeceased:!!p.death_date,age:v.show_age?age(p.birth_date,p.death_date):null,sibling_order:Number(p.sibling_order||0),claimable:!p.death_date&&!activeSet.has(p.id)&&!pendingSet.has(p.id),claim_status:activeSet.has(p.id)?'claimed':pendingSet.has(p.id)?'pending':(p.death_date?'deceased':'available')};if(v.show_birth_date)x.birth_date=p.birth_date||'';if(v.show_birth_place)x.birth_place=p.birth_place||'';if(v.show_photo)x.photo_url=p.photo_url||'';if(v.show_notes)x.notes=p.notes||'';if(p.death_date)x.death_date=p.death_date;return x});const optional_lineages=(await env.DB.prepare(`SELECT o.*,a.first_name anchor_first_name,a.last_name anchor_last_name,l.first_name linked_first_name,l.last_name linked_last_name FROM optional_lineages o JOIN persons a ON a.id=o.anchor_person_id JOIN persons l ON l.id=o.linked_person_id WHERE o.tree_id=? ORDER BY o.id`).bind(t.id).all()).results||[];const branchId=Number(url.searchParams.get('branch')||0);if(branchId){let br=null;try{br=await env.DB.prepare('SELECT b.*,p.first_name anchor_first_name,p.last_name anchor_last_name,p.title_prefix anchor_title_prefix,p.title_suffix anchor_title_suffix FROM family_branches b JOIN persons p ON p.id=b.anchor_person_id WHERE b.id=? AND b.tree_id=?').bind(branchId,t.id).first()}catch{};if(br&&br.active!==undefined&&Number(br.active)===0)br=null;if(!br)return B('Cabang Keluarga publik tidak ditemukan.',404);const bg=await publicBranchGraph(env,branchId,br.anchor_person_id,t.id);const bpersons=bg.persons.map(p=>{const v=pp.get(p.id)||{show_name:1,show_age:1,show_birth_date:0,show_birth_place:0,show_photo:0,show_notes:0};const x={id:p.id,name:v.show_name?fullname(p):'Anggota keluarga',gender:p.gender,isDeceased:!!p.death_date,age:v.show_age?age(p.birth_date,p.death_date):null,sibling_order:Number(p.branch_sibling_order||p.sibling_order||0)};if(v.show_birth_date)x.birth_date=p.birth_date||'';if(v.show_birth_place)x.birth_place=p.birth_place||'';if(v.show_photo)x.photo_url=p.photo_url||'';if(v.show_notes)x.notes=p.notes||'';if(p.death_date)x.death_date=p.death_date;return x});return J({tree:{id:br.id,name:br.name,description:br.description||'',root_person_id:br.anchor_person_id,anchor_name:fullname(br)},persons:bpersons,relationships:bg.relationships,branch:true,branch_id:br.id});}const optionalAnchor=Number(url.searchParams.get('optional')||0);if(optionalAnchor){const rows=[];const seenRows=new Set();const ids=new Set([optionalAnchor]);let frontier=new Set([optionalAnchor]);while(frontier.size){const next=new Set();for(const x of optional_lineages){const a=Number(x.anchor_person_id),l=Number(x.linked_person_id);if(seenRows.has(x.id))continue;if(frontier.has(a)||frontier.has(l)){seenRows.add(x.id);rows.push(x);if(!ids.has(a)){ids.add(a);next.add(a)}if(!ids.has(l)){ids.add(l);next.add(l)}}}frontier=next}if(!rows.length)return B('Silsilah opsional untuk anggota ini belum tersedia.',404);const rels=[];for(const x of rows){const a=Number(x.anchor_person_id),l=Number(x.linked_person_id);const label=String(x.relation_label||'Keluarga').toLowerCase();if(['ayah','ibu','kakek','nenek'].includes(label))rels.push({id:-x.id,tree_id:t.id,from_person_id:l,to_person_id:a,type:'parent'});else if(label==='anak')rels.push({id:-x.id,tree_id:t.id,from_person_id:a,to_person_id:l,type:'parent'});else if(['suami','istri'].includes(label))rels.push({id:-x.id,tree_id:t.id,from_person_id:a,to_person_id:l,type:'spouse'});}const op=persons.filter(x=>ids.has(Number(x.id)));const or=rels.filter(r=>ids.has(Number(r.from_person_id))&&ids.has(Number(r.to_person_id)));const roots=op.filter(x=>!or.some(r=>r.type==='parent'&&Number(r.to_person_id)===Number(x.id)));const top=roots.filter(x=>x.gender==='male')[0]||roots[0]||op.find(x=>x.gender==='male')||op[0];return J({optional:true,tree:{id:t.id,name:fullname(top)||'Silsilah Keluarga',description:`Silsilah keluarga opsional ${pname(persons.find(x=>Number(x.id)===optionalAnchor))}`,root_person_id:Number(top?.id||0)||null,anchor_person_id:optionalAnchor,anchor_name:pname(persons.find(x=>Number(x.id)===optionalAnchor))},persons:op,relationships:or,optional_lineages:rows},200,{'Cache-Control':'no-store, no-cache, must-revalidate'});}let branches=[];try{const brRows=(await env.DB.prepare('SELECT b.id,b.name,b.anchor_person_id,b.active,p.first_name anchor_first_name,p.last_name anchor_last_name,p.title_prefix anchor_title_prefix,p.title_suffix anchor_title_suffix FROM family_branches b JOIN persons p ON p.id=b.anchor_person_id WHERE b.tree_id=? ORDER BY b.created_at DESC').bind(t.id).all()).results||[];branches=brRows.filter(x=>x.active===undefined||Number(x.active)!==0)}catch{};return J({tree:{id:t.id,name:t.name,description:t.description,root_person_id:Number(nt?.root_person_id||0)||null},persons,relationships:g.rs,branches,optional_lineages},200,{'Cache-Control':'no-store, no-cache, must-revalidate'})}catch(e){return B(`Public API gagal: ${String(e?.message||e||'unknown error')}`,500)}
